@@ -1,0 +1,839 @@
+use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
+use sqlx::Row;
+use anyhow::{Result, Context};
+use serde::{Deserialize, Serialize};
+
+pub struct Database {
+    pool: SqlitePool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvidenceSubmission {
+    pub id: i64,
+    pub evidence_id: String,
+    pub zcash_txid: Option<String>,
+    pub ipfs_cid: String,
+    pub board_category: String,
+    pub title: String,
+    pub description: String,
+    pub commitment_hash: String,
+    pub block_height: Option<i64>,
+    pub submission_timestamp: i64,
+    pub status: String,
+    pub confirmation_count: i64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FrostSigningSession {
+    pub id: i64,
+    pub session_id: String,
+    pub evidence_id: String,
+    pub threshold: i64,
+    pub min_signers: i64,
+    pub max_signers: i64,
+    pub current_round: i64,
+    pub status: String,
+    pub group_commitment: Option<String>,
+    pub signature: Option<String>,
+    pub created_at: String,
+    pub completed_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FrostParticipant {
+    pub id: i64,
+    pub session_id: String,
+    pub participant_id: i64,
+    pub public_key: String,
+    pub round1_commitment: Option<String>,
+    pub round2_signature_share: Option<String>,
+    pub status: String,
+    pub joined_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IpfsPin {
+    pub id: i64,
+    pub cid: String,
+    pub evidence_id: Option<String>,
+    pub content_type: String,
+    pub size_bytes: Option<i64>,
+    pub pinned_at: String,
+    pub verified_at: Option<String>,
+    pub pin_service: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NearCrossPost {
+    pub id: i64,
+    pub evidence_id: String,
+    pub near_tx_hash: String,
+    pub contract_id: String,
+    pub method_name: String,
+    pub block_height: Option<i64>,
+    pub status: String,
+    pub posted_at: String,
+    pub confirmed_at: Option<String>,
+}
+
+impl Database {
+    pub async fn new(database_url: &str) -> Result<Self> {
+        // Add mode=rwc for SQLite URLs (r=read, w=write, c=create)
+        let url = if database_url.starts_with("sqlite://") {
+            if database_url.contains('?') {
+                format!("{}&mode=rwc", database_url)
+            } else {
+                format!("{}?mode=rwc", database_url)
+            }
+        } else {
+            database_url.to_string()
+        };
+
+        let pool = SqlitePoolOptions::new()
+            .max_connections(5)
+            .connect(&url)
+            .await
+            .context("Failed to create database connection pool")?;
+
+        tracing::info!("Database pool created: {}", database_url);
+
+        Ok(Self { pool })
+    }
+
+    pub async fn migrate(&self) -> Result<()> {
+        tracing::info!("Running database migrations...");
+
+        sqlx::migrate!("./migrations")
+            .run(&self.pool)
+            .await
+            .context("Failed to run migrations")?;
+
+        tracing::info!("Migrations completed successfully");
+
+        Ok(())
+    }
+
+    pub fn pool(&self) -> &SqlitePool {
+        &self.pool
+    }
+
+
+    pub async fn insert_evidence(
+        &self,
+        evidence_id: &str,
+        ipfs_cid: &str,
+        board_category: &str,
+        title: &str,
+        description: &str,
+        commitment_hash: &str,
+        submission_timestamp: i64,
+    ) -> Result<i64> {
+        let result = sqlx::query(
+            r#"
+            INSERT INTO evidence_submissions
+            (evidence_id, ipfs_cid, board_category, title, description, commitment_hash, submission_timestamp, status)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'pending')
+            "#
+        )
+        .bind(evidence_id)
+        .bind(ipfs_cid)
+        .bind(board_category)
+        .bind(title)
+        .bind(description)
+        .bind(commitment_hash)
+        .bind(submission_timestamp)
+        .execute(&self.pool)
+        .await
+        .context("Failed to insert evidence submission")?;
+
+        let id = result.last_insert_rowid();
+
+        tracing::info!("Evidence submission inserted: {} (id: {})", evidence_id, id);
+
+        Ok(id)
+    }
+
+    pub async fn update_evidence_txid(
+        &self,
+        evidence_id: &str,
+        zcash_txid: &str,
+        status: &str,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE evidence_submissions
+            SET zcash_txid = ?1, status = ?2, updated_at = CURRENT_TIMESTAMP
+            WHERE evidence_id = ?3
+            "#
+        )
+        .bind(zcash_txid)
+        .bind(status)
+        .bind(evidence_id)
+        .execute(&self.pool)
+        .await
+        .context("Failed to update evidence txid")?;
+
+        tracing::info!("Evidence {} updated: txid={}, status={}", evidence_id, zcash_txid, status);
+
+        Ok(())
+    }
+
+    pub async fn update_evidence_confirmations(
+        &self,
+        evidence_id: &str,
+        confirmation_count: i64,
+        block_height: i64,
+    ) -> Result<()> {
+        let status = if confirmation_count >= 10 { "confirmed" } else { "broadcasting" };
+
+        sqlx::query(
+            r#"
+            UPDATE evidence_submissions
+            SET confirmation_count = ?1, block_height = ?2, status = ?3, updated_at = CURRENT_TIMESTAMP
+            WHERE evidence_id = ?4
+            "#
+        )
+        .bind(confirmation_count)
+        .bind(block_height)
+        .bind(status)
+        .bind(evidence_id)
+        .execute(&self.pool)
+        .await
+        .context("Failed to update evidence confirmations")?;
+
+        tracing::debug!("Evidence {} confirmations: {} (height: {})", evidence_id, confirmation_count, block_height);
+
+        Ok(())
+    }
+
+    pub async fn get_evidence(&self, evidence_id: &str) -> Result<Option<EvidenceSubmission>> {
+        let record = sqlx::query_as::<_, EvidenceSubmission>(
+            r#"
+            SELECT id, evidence_id, zcash_txid, ipfs_cid, board_category, title, description,
+                   commitment_hash, block_height, submission_timestamp, status, confirmation_count,
+                   created_at, updated_at
+            FROM evidence_submissions
+            WHERE evidence_id = ?1
+            "#
+        )
+        .bind(evidence_id)
+        .fetch_optional(&self.pool)
+        .await
+        .context("Failed to fetch evidence submission")?;
+
+        Ok(record)
+    }
+
+    pub async fn get_evidence_by_status(&self, status: &str) -> Result<Vec<EvidenceSubmission>> {
+        let records = sqlx::query_as::<_, EvidenceSubmission>(
+            r#"
+            SELECT id, evidence_id, zcash_txid, ipfs_cid, board_category, title, description,
+                   commitment_hash, block_height, submission_timestamp, status, confirmation_count,
+                   created_at, updated_at
+            FROM evidence_submissions
+            WHERE status = ?1
+            ORDER BY submission_timestamp DESC
+            "#
+        )
+        .bind(status)
+        .fetch_all(&self.pool)
+        .await
+        .context("Failed to fetch evidence by status")?;
+
+        Ok(records)
+    }
+
+    pub async fn get_evidence_by_category(&self, category: &str) -> Result<Vec<EvidenceSubmission>> {
+        let records = sqlx::query_as::<_, EvidenceSubmission>(
+            r#"
+            SELECT id, evidence_id, zcash_txid, ipfs_cid, board_category, title, description,
+                   commitment_hash, block_height, submission_timestamp, status, confirmation_count,
+                   created_at, updated_at
+            FROM evidence_submissions
+            WHERE board_category = ?1
+            ORDER BY submission_timestamp DESC
+            "#
+        )
+        .bind(category)
+        .fetch_all(&self.pool)
+        .await
+        .context("Failed to fetch evidence by category")?;
+
+        Ok(records)
+    }
+
+
+    pub async fn create_frost_session(
+        &self,
+        session_id: &str,
+        evidence_id: &str,
+        threshold: i64,
+        min_signers: i64,
+        max_signers: i64,
+    ) -> Result<i64> {
+        let result = sqlx::query(
+            r#"
+            INSERT INTO frost_signing_sessions
+            (session_id, evidence_id, threshold, min_signers, max_signers, status, current_round)
+            VALUES (?1, ?2, ?3, ?4, ?5, 'initializing', 1)
+            "#
+        )
+        .bind(session_id)
+        .bind(evidence_id)
+        .bind(threshold)
+        .bind(min_signers)
+        .bind(max_signers)
+        .execute(&self.pool)
+        .await
+        .context("Failed to create FROST signing session")?;
+
+        let id = result.last_insert_rowid();
+
+        tracing::info!("FROST session created: {} (id: {})", session_id, id);
+
+        Ok(id)
+    }
+
+    pub async fn update_frost_session_status(
+        &self,
+        session_id: &str,
+        status: &str,
+        current_round: i64,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE frost_signing_sessions
+            SET status = ?1, current_round = ?2
+            WHERE session_id = ?3
+            "#
+        )
+        .bind(status)
+        .bind(current_round)
+        .bind(session_id)
+        .execute(&self.pool)
+        .await
+        .context("Failed to update FROST session status")?;
+
+        tracing::debug!("FROST session {} updated: status={}, round={}", session_id, status, current_round);
+
+        Ok(())
+    }
+
+    pub async fn store_frost_signature(
+        &self,
+        session_id: &str,
+        group_commitment: &str,
+        signature: &str,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE frost_signing_sessions
+            SET group_commitment = ?1, signature = ?2, status = 'completed', completed_at = CURRENT_TIMESTAMP
+            WHERE session_id = ?3
+            "#
+        )
+        .bind(group_commitment)
+        .bind(signature)
+        .bind(session_id)
+        .execute(&self.pool)
+        .await
+        .context("Failed to store FROST signature")?;
+
+        tracing::info!("FROST session {} completed with signature", session_id);
+
+        Ok(())
+    }
+
+    pub async fn get_frost_session(&self, session_id: &str) -> Result<Option<FrostSigningSession>> {
+        let record = sqlx::query_as::<_, FrostSigningSession>(
+            r#"
+            SELECT id, session_id, evidence_id, threshold, min_signers, max_signers,
+                   current_round, status, group_commitment, signature, created_at, completed_at
+            FROM frost_signing_sessions
+            WHERE session_id = ?1
+            "#
+        )
+        .bind(session_id)
+        .fetch_optional(&self.pool)
+        .await
+        .context("Failed to fetch FROST session")?;
+
+        Ok(record)
+    }
+
+
+    pub async fn add_frost_participant(
+        &self,
+        session_id: &str,
+        participant_id: i64,
+        public_key: &str,
+    ) -> Result<i64> {
+        let result = sqlx::query(
+            r#"
+            INSERT INTO frost_participants
+            (session_id, participant_id, public_key, status)
+            VALUES (?1, ?2, ?3, 'joined')
+            "#
+        )
+        .bind(session_id)
+        .bind(participant_id)
+        .bind(public_key)
+        .execute(&self.pool)
+        .await
+        .context("Failed to add FROST participant")?;
+
+        let id = result.last_insert_rowid();
+
+        tracing::debug!("Participant {} added to FROST session {}", participant_id, session_id);
+
+        Ok(id)
+    }
+
+    pub async fn update_participant_round1(
+        &self,
+        session_id: &str,
+        participant_id: i64,
+        commitment: &str,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE frost_participants
+            SET round1_commitment = ?1, status = 'round1_complete'
+            WHERE session_id = ?2 AND participant_id = ?3
+            "#
+        )
+        .bind(commitment)
+        .bind(session_id)
+        .bind(participant_id)
+        .execute(&self.pool)
+        .await
+        .context("Failed to update participant Round 1")?;
+
+        tracing::debug!("Participant {} Round 1 complete in session {}", participant_id, session_id);
+
+        Ok(())
+    }
+
+    pub async fn update_participant_round2(
+        &self,
+        session_id: &str,
+        participant_id: i64,
+        signature_share: &str,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE frost_participants
+            SET round2_signature_share = ?1, status = 'round2_complete'
+            WHERE session_id = ?2 AND participant_id = ?3
+            "#
+        )
+        .bind(signature_share)
+        .bind(session_id)
+        .bind(participant_id)
+        .execute(&self.pool)
+        .await
+        .context("Failed to update participant Round 2")?;
+
+        tracing::debug!("Participant {} Round 2 complete in session {}", participant_id, session_id);
+
+        Ok(())
+    }
+
+    pub async fn get_session_participants(&self, session_id: &str) -> Result<Vec<FrostParticipant>> {
+        let records = sqlx::query_as::<_, FrostParticipant>(
+            r#"
+            SELECT id, session_id, participant_id, public_key, round1_commitment,
+                   round2_signature_share, status, joined_at
+            FROM frost_participants
+            WHERE session_id = ?1
+            ORDER BY participant_id ASC
+            "#
+        )
+        .bind(session_id)
+        .fetch_all(&self.pool)
+        .await
+        .context("Failed to fetch session participants")?;
+
+        Ok(records)
+    }
+
+
+    pub async fn record_ipfs_pin(
+        &self,
+        cid: &str,
+        evidence_id: Option<&str>,
+        content_type: &str,
+        size_bytes: Option<i64>,
+        pin_service: &str,
+    ) -> Result<i64> {
+        let result = sqlx::query(
+            r#"
+            INSERT INTO ipfs_pins
+            (cid, evidence_id, content_type, size_bytes, pin_service)
+            VALUES (?1, ?2, ?3, ?4, ?5)
+            "#
+        )
+        .bind(cid)
+        .bind(evidence_id)
+        .bind(content_type)
+        .bind(size_bytes)
+        .bind(pin_service)
+        .execute(&self.pool)
+        .await
+        .context("Failed to record IPFS pin")?;
+
+        let id = result.last_insert_rowid();
+
+        tracing::debug!("IPFS pin recorded: {} (service: {})", cid, pin_service);
+
+        Ok(id)
+    }
+
+    pub async fn verify_ipfs_pin(&self, cid: &str) -> Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE ipfs_pins
+            SET verified_at = CURRENT_TIMESTAMP
+            WHERE cid = ?1
+            "#
+        )
+        .bind(cid)
+        .execute(&self.pool)
+        .await
+        .context("Failed to verify IPFS pin")?;
+
+        tracing::debug!("IPFS pin verified: {}", cid);
+
+        Ok(())
+    }
+
+    pub async fn get_evidence_pins(&self, evidence_id: &str) -> Result<Vec<IpfsPin>> {
+        let records = sqlx::query_as::<_, IpfsPin>(
+            r#"
+            SELECT id, cid, evidence_id, content_type, size_bytes, pinned_at, verified_at, pin_service
+            FROM ipfs_pins
+            WHERE evidence_id = ?1
+            ORDER BY pinned_at DESC
+            "#
+        )
+        .bind(evidence_id)
+        .fetch_all(&self.pool)
+        .await
+        .context("Failed to fetch evidence pins")?;
+
+        Ok(records)
+    }
+
+
+    pub async fn record_near_post(
+        &self,
+        evidence_id: &str,
+        near_tx_hash: &str,
+        contract_id: &str,
+        method_name: &str,
+    ) -> Result<i64> {
+        let result = sqlx::query(
+            r#"
+            INSERT INTO near_cross_posts
+            (evidence_id, near_tx_hash, contract_id, method_name, status)
+            VALUES (?1, ?2, ?3, ?4, 'pending')
+            "#
+        )
+        .bind(evidence_id)
+        .bind(near_tx_hash)
+        .bind(contract_id)
+        .bind(method_name)
+        .execute(&self.pool)
+        .await
+        .context("Failed to record NEAR post")?;
+
+        let id = result.last_insert_rowid();
+
+        tracing::info!("NEAR cross-post recorded: {} -> {}", evidence_id, near_tx_hash);
+
+        Ok(id)
+    }
+
+    pub async fn confirm_near_post(
+        &self,
+        near_tx_hash: &str,
+        block_height: i64,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE near_cross_posts
+            SET status = 'confirmed', block_height = ?1, confirmed_at = CURRENT_TIMESTAMP
+            WHERE near_tx_hash = ?2
+            "#
+        )
+        .bind(block_height)
+        .bind(near_tx_hash)
+        .execute(&self.pool)
+        .await
+        .context("Failed to confirm NEAR post")?;
+
+        tracing::info!("NEAR post confirmed: {} at height {}", near_tx_hash, block_height);
+
+        Ok(())
+    }
+
+    pub async fn get_evidence_near_posts(&self, evidence_id: &str) -> Result<Vec<NearCrossPost>> {
+        let records = sqlx::query_as::<_, NearCrossPost>(
+            r#"
+            SELECT id, evidence_id, near_tx_hash, contract_id, method_name,
+                   block_height, status, posted_at, confirmed_at
+            FROM near_cross_posts
+            WHERE evidence_id = ?1
+            ORDER BY posted_at DESC
+            "#
+        )
+        .bind(evidence_id)
+        .fetch_all(&self.pool)
+        .await
+        .context("Failed to fetch evidence NEAR posts")?;
+
+        Ok(records)
+    }
+
+
+    pub async fn get_stats(&self) -> Result<DatabaseStats> {
+        let row = sqlx::query(
+            r#"
+            SELECT
+                (SELECT COUNT(*) FROM evidence_submissions) as total_evidence,
+                (SELECT COUNT(*) FROM evidence_submissions WHERE status = 'confirmed') as confirmed_evidence,
+                (SELECT COUNT(*) FROM frost_signing_sessions) as total_sessions,
+                (SELECT COUNT(*) FROM frost_signing_sessions WHERE status = 'completed') as completed_sessions,
+                (SELECT COUNT(*) FROM ipfs_pins) as total_pins,
+                (SELECT COUNT(*) FROM near_cross_posts) as total_near_posts
+            "#
+        )
+        .fetch_one(&self.pool)
+        .await
+        .context("Failed to fetch database stats")?;
+
+        Ok(DatabaseStats {
+            total_evidence: row.get(0),
+            confirmed_evidence: row.get(1),
+            total_sessions: row.get(2),
+            completed_sessions: row.get(3),
+            total_pins: row.get(4),
+            total_near_posts: row.get(5),
+        })
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DatabaseStats {
+    pub total_evidence: i64,
+    pub confirmed_evidence: i64,
+    pub total_sessions: i64,
+    pub completed_sessions: i64,
+    pub total_pins: i64,
+    pub total_near_posts: i64,
+}
+
+impl sqlx::FromRow<'_, sqlx::sqlite::SqliteRow> for EvidenceSubmission {
+    fn from_row(row: &sqlx::sqlite::SqliteRow) -> sqlx::Result<Self> {
+        Ok(Self {
+            id: row.try_get("id")?,
+            evidence_id: row.try_get("evidence_id")?,
+            zcash_txid: row.try_get("zcash_txid")?,
+            ipfs_cid: row.try_get("ipfs_cid")?,
+            board_category: row.try_get("board_category")?,
+            title: row.try_get("title")?,
+            description: row.try_get("description")?,
+            commitment_hash: row.try_get("commitment_hash")?,
+            block_height: row.try_get("block_height")?,
+            submission_timestamp: row.try_get("submission_timestamp")?,
+            status: row.try_get("status")?,
+            confirmation_count: row.try_get("confirmation_count")?,
+            created_at: row.try_get("created_at")?,
+            updated_at: row.try_get("updated_at")?,
+        })
+    }
+}
+
+impl sqlx::FromRow<'_, sqlx::sqlite::SqliteRow> for FrostSigningSession {
+    fn from_row(row: &sqlx::sqlite::SqliteRow) -> sqlx::Result<Self> {
+        Ok(Self {
+            id: row.try_get("id")?,
+            session_id: row.try_get("session_id")?,
+            evidence_id: row.try_get("evidence_id")?,
+            threshold: row.try_get("threshold")?,
+            min_signers: row.try_get("min_signers")?,
+            max_signers: row.try_get("max_signers")?,
+            current_round: row.try_get("current_round")?,
+            status: row.try_get("status")?,
+            group_commitment: row.try_get("group_commitment")?,
+            signature: row.try_get("signature")?,
+            created_at: row.try_get("created_at")?,
+            completed_at: row.try_get("completed_at")?,
+        })
+    }
+}
+
+impl sqlx::FromRow<'_, sqlx::sqlite::SqliteRow> for FrostParticipant {
+    fn from_row(row: &sqlx::sqlite::SqliteRow) -> sqlx::Result<Self> {
+        Ok(Self {
+            id: row.try_get("id")?,
+            session_id: row.try_get("session_id")?,
+            participant_id: row.try_get("participant_id")?,
+            public_key: row.try_get("public_key")?,
+            round1_commitment: row.try_get("round1_commitment")?,
+            round2_signature_share: row.try_get("round2_signature_share")?,
+            status: row.try_get("status")?,
+            joined_at: row.try_get("joined_at")?,
+        })
+    }
+}
+
+impl sqlx::FromRow<'_, sqlx::sqlite::SqliteRow> for IpfsPin {
+    fn from_row(row: &sqlx::sqlite::SqliteRow) -> sqlx::Result<Self> {
+        Ok(Self {
+            id: row.try_get("id")?,
+            cid: row.try_get("cid")?,
+            evidence_id: row.try_get("evidence_id")?,
+            content_type: row.try_get("content_type")?,
+            size_bytes: row.try_get("size_bytes")?,
+            pinned_at: row.try_get("pinned_at")?,
+            verified_at: row.try_get("verified_at")?,
+            pin_service: row.try_get("pin_service")?,
+        })
+    }
+}
+
+impl sqlx::FromRow<'_, sqlx::sqlite::SqliteRow> for NearCrossPost {
+    fn from_row(row: &sqlx::sqlite::SqliteRow) -> sqlx::Result<Self> {
+        Ok(Self {
+            id: row.try_get("id")?,
+            evidence_id: row.try_get("evidence_id")?,
+            near_tx_hash: row.try_get("near_tx_hash")?,
+            contract_id: row.try_get("contract_id")?,
+            method_name: row.try_get("method_name")?,
+            block_height: row.try_get("block_height")?,
+            status: row.try_get("status")?,
+            posted_at: row.try_get("posted_at")?,
+            confirmed_at: row.try_get("confirmed_at")?,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_database_creation() {
+        let db = Database::new("sqlite::memory:").await;
+        assert!(db.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_migrations() {
+        let db = Database::new("sqlite::memory:").await.unwrap();
+        let result = db.migrate().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_insert_and_fetch_evidence() {
+        let db = Database::new("sqlite::memory:").await.unwrap();
+        db.migrate().await.unwrap();
+
+        let evidence_id = "test_001";
+        let ipfs_cid = "QmTest123";
+
+        let id = db.insert_evidence(
+            evidence_id,
+            ipfs_cid,
+            "Healthcare",
+            "Test Evidence",
+            "Test description",
+            &"a".repeat(64),
+            1234567890,
+        ).await.unwrap();
+
+        assert!(id > 0);
+
+        let evidence = db.get_evidence(evidence_id).await.unwrap();
+        assert!(evidence.is_some());
+
+        let evidence = evidence.unwrap();
+        assert_eq!(evidence.evidence_id, evidence_id);
+        assert_eq!(evidence.ipfs_cid, ipfs_cid);
+        assert_eq!(evidence.status, "pending");
+    }
+
+    #[tokio::test]
+    async fn test_frost_session_workflow() {
+        let db = Database::new("sqlite::memory:").await.unwrap();
+        db.migrate().await.unwrap();
+
+        db.insert_evidence(
+            "test_001",
+            "QmTest123",
+            "Healthcare",
+            "Test Evidence",
+            "Description",
+            &"a".repeat(64),
+            1234567890,
+        ).await.unwrap();
+
+        let session_id = "session_001";
+        let id = db.create_frost_session(
+            session_id,
+            "test_001",
+            2,
+            2,
+            3,
+        ).await.unwrap();
+
+        assert!(id > 0);
+
+        db.add_frost_participant(session_id, 1, "pubkey1").await.unwrap();
+        db.add_frost_participant(session_id, 2, "pubkey2").await.unwrap();
+
+        let session = db.get_frost_session(session_id).await.unwrap();
+        assert!(session.is_some());
+
+        let session = session.unwrap();
+        assert_eq!(session.session_id, session_id);
+        assert_eq!(session.threshold, 2);
+
+        let participants = db.get_session_participants(session_id).await.unwrap();
+        assert_eq!(participants.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_database_stats() {
+        let db = Database::new("sqlite::memory:").await.unwrap();
+        db.migrate().await.unwrap();
+
+        db.insert_evidence(
+            "test_001",
+            "QmTest1",
+            "Healthcare",
+            "Evidence 1",
+            "Description 1",
+            &"a".repeat(64),
+            1234567890,
+        ).await.unwrap();
+
+        db.insert_evidence(
+            "test_002",
+            "QmTest2",
+            "Legal",
+            "Evidence 2",
+            "Description 2",
+            &"b".repeat(64),
+            1234567891,
+        ).await.unwrap();
+
+        let stats = db.get_stats().await.unwrap();
+        assert_eq!(stats.total_evidence, 2);
+        assert_eq!(stats.confirmed_evidence, 0);
+    }
+}

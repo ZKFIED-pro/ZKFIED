@@ -1,0 +1,65 @@
+[package]
+name = "zkfied-zcash-core"
+version = "0.1.0"
+edition = "2021"
+authors = ["ZKFIED Team"]
+description = "Production-grade Zcash cryptographic core for ZKFIED whistleblower platform"
+license = "MIT"
+
+[lib]
+name = "zkfied_zcash_core"
+crate-type = ["lib", "cdylib"]
+
+[dependencies]
+# Zcash Core Libraries (Official, Audited)
+zcash_primitives = "0.15"
+zcash_address = "0.3"
+zcash_note_encryption = "0.4"
+zcash_encoding = "0.2"
+
+# Orchard Protocol
+orchard = "0.8"
+
+# FROST Threshold Signatures (Zcash Foundation, NCC Audited)
+frost-rerandomized = "2.0.0"
+frost-core = "2.0.0"
+
+# Cryptographic Primitives
+blake2b_simd = "1.0"
+jubjub = "0.10"
+bls12_381 = "0.8"
+pasta_curves = "0.5"
+group = "0.13"
+ff = "0.13"
+
+# Key Management & Security
+zeroize = { version = "1.7", features = ["derive"] }
+secrecy = "0.8"
+subtle = "2.4"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+hex = "0.4"
+base64 = "0.22"
+
+# Error Handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Async Runtime (for future RPC integration)
+tokio = { version = "1.35", features = ["full"], optional = true }
+
+# Random Number Generation
+rand = "0.8"
+rand_core = "0.6"
+
+[dev-dependencies]
+proptest = "1.4"
+criterion = "0.5"
+
+[features]
+default = ["std"]
+std = []
+async = ["tokio"]
+

@@ -1,0 +1,5 @@
+build:
+  docker:
+    web: services/frost-coordinator/Dockerfile
+run:
+  web: /app/zkfied-frost-coordinator

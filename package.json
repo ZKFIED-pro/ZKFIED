@@ -1,0 +1,26 @@
+{
+  "name": "zkfied",
+  "version": "1.0.0",
+  "description": "Zero-Knowledge Evidence Network for Whistleblowers powered by Zcash",
+  "private": true,
+  "workspaces": [
+    "lib/*",
+    "circuits",
+    "contracts",
+    "backend",
+    "frontend",
+    "cli"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "dev": "npm run dev --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "clean": "rm -rf node_modules */node_modules */*/node_modules"
+  },
+  "keywords": ["zcash", "zero-knowledge", "whistleblower", "privacy", "zksnark"],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

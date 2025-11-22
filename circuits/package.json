@@ -1,0 +1,19 @@
+{
+  "name": "@zkfied/circuits",
+  "version": "1.0.0",
+  "description": "zkSNARK circuits for ZKFIED",
+  "scripts": {
+    "install:circom": "curl -L https://github.com/iden3/circom/releases/latest/download/circom-macos-amd64 -o /usr/local/bin/circom && chmod +x /usr/local/bin/circom",
+    "setup:ptau": "bash scripts/download-ptau.sh",
+    "compile": "bash scripts/compile.sh",
+    "ceremony": "bash scripts/ceremony.sh",
+    "test": "node test/test-circuits.js"
+  },
+  "dependencies": {
+    "circomlib": "^2.0.5",
+    "snarkjs": "^0.7.5"
+  },
+  "devDependencies": {
+    "chai": "^4.3.10"
+  }
+}

@@ -1,0 +1,151 @@
+version: '3.8'
+
+services:
+  zcashd:
+    image: electriccoinco/zcashd:latest
+    ports:
+      - "8232:8232"
+      - "8233:8233"
+    volumes:
+      - zcash-data:/root/.zcash
+      - ./zcash.conf:/root/.zcash/zcash.conf:ro
+    command: >
+      zcashd
+      -rpcuser=${ZCASH_RPC_USER:-zcashrpc}
+      -rpcpassword=${ZCASH_RPC_PASS:-secure_password}
+      -rpcbind=0.0.0.0
+      -rpcallowip=0.0.0.0/0
+      -testnet
+      -txindex=1
+      -insightexplorer=1
+      -experimentalfeatures=1
+      -developersapling=1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "zcash-cli", "-testnet", "getinfo"]
+      interval: 60s
+      timeout: 30s
+      retries: 5
+      start_period: 120s
+
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: zkfied
+      POSTGRES_USER: ${POSTGRES_USER:-zkfied}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secure_password}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zkfied"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ipfs:
+    image: ipfs/kubo:latest
+    ports:
+      - "4001:4001"
+      - "5001:5001"
+      - "8080:8080"
+    volumes:
+      - ipfs-data:/data/ipfs
+    environment:
+      IPFS_PROFILE: server
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ipfs", "id"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frost-coordinator:
+    build: ./services/frost-coordinator
+    ports:
+      - "3000:3000"
+      - "9090:9090"
+    environment:
+      PORT: 3000
+      METRICS_PORT: 9090
+      DATABASE_URL: postgresql://${POSTGRES_USER:-zkfied}:${POSTGRES_PASSWORD:-secure_password}@postgres:5432/zkfied
+      RUST_LOG: info,frost_coordinator=debug
+      ZCASH_RPC_URL: http://zcashd:8232
+      ZCASH_RPC_USER: ${ZCASH_RPC_USER:-zcashrpc}
+      ZCASH_RPC_PASS: ${ZCASH_RPC_PASS:-secure_password}
+      IPFS_API_URL: http://ipfs:5001
+      IPFS_GATEWAY_URL: http://ipfs:8080
+      NETWORK: testnet
+      TLS_CERT_PATH: /certs/server.crt
+      TLS_KEY_PATH: /certs/server.key
+    volumes:
+      - frost-data:/data
+      - ./certs:/certs:ro
+    depends_on:
+      zcashd:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      ipfs:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+    restart: unless-stopped
+    depends_on:
+      - frost-coordinator
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-secure_password}
+      GF_INSTALL_PLUGINS: grafana-piechart-panel
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      - frost-coordinator
+    restart: unless-stopped
+
+volumes:
+  zcash-data:
+  postgres-data:
+  ipfs-data:
+  frost-data:
+  prometheus-data:
+  grafana-data:

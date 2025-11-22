@@ -1,0 +1,371 @@
+openapi: 3.0.3
+info:
+  title: ZKFIED FROST Coordinator API
+  description: |
+    Production-grade FROST threshold signature coordinator for Zcash-based evidence submissions.
+
+    This API provides endpoints for:
+    - Evidence submission with FROST multi-signature authorization
+    - Zcash Shielded Assets (ZSA) minting
+    - Payment disclosure proof generation
+    - IPFS encrypted evidence storage
+    - Multi-board authorization system
+  version: 1.0.0
+  contact:
+    name: ZKFIED Security Team
+    url: https://github.com/your-org/zkfied
+  license:
+    name: MIT
+
+servers:
+  - url: https://api.zkfied.io
+    description: Production server
+  - url: https://testnet.zkfied.io
+    description: Testnet server
+  - url: http://localhost:3000
+    description: Local development
+
+tags:
+  - name: Evidence
+    description: Evidence submission and retrieval
+  - name: FROST
+    description: FROST threshold signature sessions
+  - name: Health
+    description: Service health and monitoring
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      description: Returns service health status
+      tags: [Health]
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: OK
+
+  /metrics:
+    get:
+      summary: Prometheus metrics
+      description: Returns Prometheus-formatted metrics
+      tags: [Health]
+      responses:
+        '200':
+          description: Metrics in Prometheus format
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /evidence/submit:
+    post:
+      summary: Submit new evidence
+      description: Submit encrypted evidence with FROST authorization
+      tags: [Evidence]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvidenceSubmissionRequest'
+      responses:
+        '200':
+          description: Evidence submitted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvidenceSubmissionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /evidence/{evidenceId}:
+    get:
+      summary: Get evidence status
+      description: Retrieve evidence submission status and metadata
+      tags: [Evidence]
+      parameters:
+        - name: evidenceId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Unique evidence identifier
+      responses:
+        '200':
+          description: Evidence found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvidenceStatus'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /evidence/board/{category}:
+    get:
+      summary: List evidence by board
+      description: List all evidence submissions for a specific board category
+      tags: [Evidence]
+      parameters:
+        - name: category
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [healthcare, government, corporate, civil_society, media]
+          description: Board category
+      responses:
+        '200':
+          description: Evidence list retrieved
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EvidenceStatus'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /frost/session/{sessionId}:
+    get:
+      summary: Get FROST session info
+      description: Retrieve FROST signing session status and participant information
+      tags: [FROST]
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: FROST session identifier
+      responses:
+        '200':
+          description: Session found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FrostSessionInfo'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /stats:
+    get:
+      summary: Get database statistics
+      description: Retrieve database and service statistics
+      tags: [Health]
+      responses:
+        '200':
+          description: Statistics retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+
+components:
+  schemas:
+    EvidenceSubmissionRequest:
+      type: object
+      required:
+        - title
+        - description
+        - board_category
+        - encrypted_evidence
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 256
+          description: Evidence title (encrypted)
+        description:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          description: Evidence description
+        board_category:
+          type: string
+          enum: [healthcare, government, corporate, civil_society, media]
+          description: Target board for authorization
+        encrypted_evidence:
+          type: string
+          format: byte
+          description: Base64-encoded encrypted evidence payload
+        frost_authorization:
+          type: object
+          required:
+            - signature
+            - participants
+          properties:
+            signature:
+              type: string
+              format: hex
+              description: FROST threshold signature
+            participants:
+              type: array
+              minItems: 3
+              items:
+                type: string
+                description: Participant public keys
+
+    EvidenceSubmissionResponse:
+      type: object
+      properties:
+        evidence_id:
+          type: string
+          format: uuid
+        zcash_txid:
+          type: string
+          format: hex
+          description: Zcash transaction ID
+        ipfs_cid:
+          type: string
+          description: IPFS content identifier
+        payment_disclosure_proof:
+          type: string
+          format: hex
+          description: ZIP-311 payment disclosure proof
+        zsa_asset_id:
+          type: string
+          format: hex
+          description: Zcash Shielded Asset ID
+        status:
+          type: string
+          enum: [pending, confirmed, failed]
+
+    EvidenceStatus:
+      type: object
+      properties:
+        evidence_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        board_category:
+          type: string
+        zcash_txid:
+          type: string
+        ipfs_cid:
+          type: string
+        status:
+          type: string
+          enum: [pending, confirmed, failed]
+        confirmations:
+          type: integer
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+        confirmed_at:
+          type: string
+          format: date-time
+
+    FrostSessionInfo:
+      type: object
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        evidence_id:
+          type: string
+          format: uuid
+        threshold:
+          type: integer
+          minimum: 2
+        min_signers:
+          type: integer
+        max_signers:
+          type: integer
+        current_round:
+          type: integer
+          enum: [1, 2]
+        status:
+          type: string
+          enum: [initializing, round1, round2, completed, failed]
+        participants:
+          type: array
+          items:
+            type: object
+            properties:
+              participant_id:
+                type: integer
+              public_key:
+                type: string
+                format: hex
+              status:
+                type: string
+                enum: [joined, round1_complete, round2_complete, failed]
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: BAD_REQUEST
+            message: Invalid request parameters
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: NOT_FOUND
+            message: Resource not found
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: INTERNAL_ERROR
+            message: An internal error occurred
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT authentication token
+
+security:
+  - BearerAuth: []

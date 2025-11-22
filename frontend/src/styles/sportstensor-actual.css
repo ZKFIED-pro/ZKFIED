@@ -1,0 +1,291 @@
+/* ZKFIED - ACTUAL SportsTensor Design System */
+/* Based on real HTML/CSS from sportstensor.com */
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  /* Exact SportsTensor Colors */
+  --bg-black: rgb(9, 9, 9);
+  --text-white: rgb(255, 255, 255);
+  --text-gray: rgb(160, 160, 160);
+  --border-gray: rgb(52, 52, 52);
+  --corner-white: rgb(255, 255, 255);
+
+  /* Typography - JetBrains Mono ONLY */
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Spacing */
+  --container-max: 1376px;
+  --gap: 25px;
+}
+
+body {
+  font-family: var(--font-mono);
+  background: var(--bg-black);
+  color: var(--text-white);
+  font-size: 12px;
+  line-height: 1.3em;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* All text is JetBrains Mono */
+h1, h2, h3, h4, h5, h6, p, span, div, a, button, input, label {
+  font-family: var(--font-mono);
+}
+
+h1 {
+  font-size: 25px;
+  font-weight: 700;
+  color: var(--text-white);
+}
+
+h2 {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-white);
+}
+
+h3 {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-white);
+}
+
+p {
+  font-size: 12px;
+  color: var(--text-gray);
+  line-height: 1.6;
+}
+
+/* Container */
+.container {
+  max-width: var(--container-max);
+  margin: 0 auto;
+  padding: 0 25px;
+}
+
+/* Card with Corner Brackets - THE KEY SPORTSTENSOR ELEMENT */
+.st-card {
+  position: relative;
+  background: transparent;
+  border: 1px solid var(--border-gray);
+  padding: var(--gap);
+}
+
+/* Corner Brackets - Top Left, Top Right, Bottom Left, Bottom Right */
+.st-card::before,
+.st-card::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: var(--bg-black);
+}
+
+/* Top-left corner bracket */
+.st-card::before {
+  top: -1px;
+  left: -1px;
+  border-top: 1px solid var(--corner-white);
+  border-left: 1px solid var(--corner-white);
+}
+
+/* Top-right corner bracket */
+.st-card::after {
+  top: -1px;
+  right: -1px;
+  border-top: 1px solid var(--corner-white);
+  border-right: 1px solid var(--corner-white);
+}
+
+/* Bottom corners using pseudo-elements on child wrapper */
+.st-card-inner {
+  position: relative;
+}
+
+.st-card-inner::before,
+.st-card-inner::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: var(--bg-black);
+  bottom: calc(-1 * var(--gap) - 1px);
+}
+
+/* Bottom-left corner bracket */
+.st-card-inner::before {
+  left: calc(-1 * var(--gap) - 1px);
+  border-bottom: 1px solid var(--corner-white);
+  border-left: 1px solid var(--corner-white);
+}
+
+/* Bottom-right corner bracket */
+.st-card-inner::after {
+  right: calc(-1 * var(--gap) - 1px);
+  border-bottom: 1px solid var(--corner-white);
+  border-right: 1px solid var(--corner-white);
+}
+
+/* Button with Corner Brackets */
+.st-btn {
+  position: relative;
+  background: transparent;
+  border: 1px solid var(--border-gray);
+  color: var(--text-white);
+  font-size: 12px;
+  font-weight: 400;
+  padding: 10px 30px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  text-decoration: none;
+  display: inline-block;
+  text-align: center;
+}
+
+/* Button corner brackets */
+.st-btn::before,
+.st-btn::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: var(--bg-black);
+}
+
+.st-btn::before {
+  top: -1px;
+  left: -1px;
+  border-top: 1px solid var(--corner-white);
+  border-left: 1px solid var(--corner-white);
+}
+
+.st-btn::after {
+  top: -1px;
+  right: -1px;
+  border-top: 1px solid var(--corner-white);
+  border-right: 1px solid var(--corner-white);
+}
+
+.st-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* Coming Soon Badge */
+.st-badge {
+  position: relative;
+  background: transparent;
+  border: 1px solid var(--border-gray);
+  padding: 8px 20px;
+  font-size: 12px;
+  color: var(--text-white);
+  display: inline-block;
+}
+
+.st-badge::before,
+.st-badge::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: var(--bg-black);
+}
+
+.st-badge::before {
+  top: -1px;
+  left: -1px;
+  border-top: 1px solid var(--corner-white);
+  border-left: 1px solid var(--corner-white);
+}
+
+.st-badge::after {
+  bottom: -1px;
+  right: -1px;
+  border-bottom: 1px solid var(--corner-white);
+  border-right: 1px solid var(--corner-white);
+}
+
+/* Input Fields */
+input, textarea {
+  font-family: var(--font-mono);
+  background: var(--bg-black);
+  border: 1px solid var(--border-gray);
+  color: var(--text-white);
+  padding: 12px;
+  font-size: 12px;
+  width: 100%;
+}
+
+input:focus, textarea:focus {
+  outline: none;
+  border-color: var(--text-white);
+}
+
+input::placeholder {
+  color: var(--text-gray);
+}
+
+/* Grid Layouts */
+.grid {
+  display: grid;
+  gap: var(--gap);
+}
+
+.grid-2 { grid-template-columns: repeat(2, 1fr); }
+.grid-3 { grid-template-columns: repeat(3, 1fr); }
+.grid-4 { grid-template-columns: repeat(4, 1fr); }
+
+/* Text Styles */
+.text-white { color: var(--text-white); }
+.text-gray { color: var(--text-gray); }
+.text-bold { font-weight: 700; }
+
+/* Spacing */
+.section { padding: 80px 0; }
+.mb-sm { margin-bottom: 10px; }
+.mb-md { margin-bottom: 25px; }
+.mb-lg { margin-bottom: 35px; }
+
+/* Flex Utilities */
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.justify-center { justify-content: center; }
+.gap { gap: var(--gap); }
+
+/* Text Alignment */
+.text-center { text-align: center; }
+
+/* Responsive */
+@media (max-width: 1375px) {
+  .container {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 1024px) {
+  .grid-4,
+  .grid-3 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 809px) {
+  .grid-2,
+  .grid-3,
+  .grid-4 {
+    grid-template-columns: 1fr;
+  }
+
+  .container {
+    padding: 0 15px;
+  }
+}

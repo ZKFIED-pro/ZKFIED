@@ -1,0 +1,11 @@
+HiddenServiceDir /Users/ldm/Desktop/ZKFIED/.tor/frontend
+HiddenServicePort 80 127.0.0.1:5173
+
+HiddenServiceDir /Users/ldm/Desktop/ZKFIED/.tor/backend
+HiddenServicePort 80 127.0.0.1:3000
+
+SOCKSPort 9050
+ControlPort 9051
+DataDirectory /Users/ldm/Desktop/ZKFIED/.tor/data
+
+Log notice file /Users/ldm/Desktop/ZKFIED/.tor/tor.log

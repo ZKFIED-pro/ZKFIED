@@ -1,0 +1,144 @@
+/* ZKFIED Theme - SportsTensor/rekt.news inspired dark aesthetic */
+/* Pure black/white/gray only - NO colors */
+
+:root {
+  /* Core color palette */
+  --color-void: #0a0a0a; /* Pure black background */
+  --color-dark: #111111; /* Card backgrounds */
+  --color-surface: #1a1a1a; /* Subtle contrast areas */
+  --color-border: #222222; /* Barely visible lines */
+  --color-hover: #1f1f1f; /* One shade lighter */
+  
+  /* Text colors */
+  --color-text-primary: #e0e0e0; /* Off-white body text */
+  --color-text-secondary: #888888; /* Muted gray */
+  --color-text-accent: #666666; /* Medium gray highlights */
+  --color-white: #ffffff; /* Pure white - use sparingly */
+  
+  /* Typography */
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-body: 'IBM Plex Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  
+  /* Spacing scale */
+  --spacing-xs: 0.25rem; /* 4px */
+  --spacing-sm: 0.5rem; /* 8px */
+  --spacing-md: 1rem; /* 16px */
+  --spacing-lg: 1.5rem; /* 24px */
+  --spacing-xl: 2rem; /* 32px */
+  --spacing-2xl: 3rem; /* 48px */
+  --spacing-3xl: 4rem; /* 64px */
+  
+  /* Border radius */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  
+  /* Animation timing */
+  --transition-fast: 200ms;
+  --transition-normal: 300ms;
+  --transition-slow: 500ms;
+  
+  /* Z-index scale */
+  --z-dropdown: 1000;
+  --z-sticky: 1020;
+  --z-fixed: 1030;
+  --z-modal-backdrop: 1040;
+  --z-modal: 1050;
+  --z-popover: 1060;
+  --z-tooltip: 1070;
+}
+
+/* Component base styles */
+.card {
+  background-color: var(--color-dark);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast) ease-out;
+}
+
+.card:hover {
+  border-color: var(--color-text-accent);
+  transform: translateY(-2px);
+}
+
+.button {
+  font-family: var(--font-body);
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast) ease-out;
+  cursor: pointer;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.button-primary {
+  background-color: var(--color-surface);
+  color: var(--color-white);
+  border: 1px solid transparent;
+}
+
+.button-primary:hover:not(:disabled) {
+  background-color: transparent;
+  border-color: var(--color-white);
+}
+
+.button-secondary {
+  background-color: transparent;
+  color: var(--color-white);
+  border: 1px solid var(--color-border);
+}
+
+.button-secondary:hover:not(:disabled) {
+  border-color: var(--color-text-accent);
+  color: var(--color-white);
+}
+
+.input {
+  background-color: var(--color-dark);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  padding: var(--spacing-md);
+  transition: border-color var(--transition-fast) ease-out;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--color-text-accent);
+}
+
+.input::placeholder {
+  color: var(--color-text-secondary);
+}
+
+/* Layout utilities */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 var(--spacing-lg);
+}
+
+@media (max-width: 640px) {
+  .container {
+    padding: 0 var(--spacing-md);
+  }
+}
+
+/* Gradient overlays (minimal, for texture only) */
+.subtle-texture {
+  background-image: 
+    linear-gradient(
+      180deg,
+      var(--color-void) 0%,
+      var(--color-dark) 100%
+    );
+}

@@ -1,0 +1,31 @@
+{
+  "name": "zkfied-demo",
+  "version": "1.0.0",
+  "description": "ZKFIED - Zero-Knowledge Evidence Network Demo",
+  "main": "zkfied-demo.ts",
+  "scripts": {
+    "demo": "ts-node zkfied-demo.ts",
+    "setup": "npm install && npm run setup:zcash",
+    "setup:zcash": "echo 'Please ensure zcashd is running with RPC enabled'",
+    "test": "ts-node zkfied-demo.ts"
+  },
+  "keywords": [
+    "zcash",
+    "zkp",
+    "whistleblower",
+    "privacy",
+    "frost",
+    "threshold-signatures"
+  ],
+  "author": "ZKFIED Team",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.7.9",
+    "tweetnacl": "^1.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.2"
+  }
+}

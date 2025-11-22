@@ -1,0 +1,240 @@
+/* ZKFIED Animations - Minimal, purposeful motion */
+/* SportsTensor/rekt.news style: subtle, professional, no flashy effects */
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes subtlePulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+@keyframes cardHover {
+  from {
+    transform: translateY(0);
+    border-color: var(--color-border);
+  }
+  to {
+    transform: translateY(-2px);
+    border-color: var(--color-text-accent);
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Animation utility classes */
+.animate-fade-in {
+  animation: fadeIn var(--transition-fast) ease-out;
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp var(--transition-normal) ease-out;
+}
+
+.animate-pulse {
+  animation: subtlePulse 2s ease-in-out infinite;
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+.animate-slide-in-right {
+  animation: slideInRight var(--transition-normal) ease-out;
+}
+
+.animate-slide-in-left {
+  animation: slideInLeft var(--transition-normal) ease-out;
+}
+
+/* Transition utilities */
+.transition-all {
+  transition: all var(--transition-fast) ease-out;
+}
+
+.transition-colors {
+  transition: color var(--transition-fast) ease-out,
+              background-color var(--transition-fast) ease-out,
+              border-color var(--transition-fast) ease-out;
+}
+
+.transition-transform {
+  transition: transform var(--transition-fast) ease-out;
+}
+
+.transition-opacity {
+  transition: opacity var(--transition-fast) ease-out;
+}
+
+/* Hover effects */
+.hover-lift {
+  transition: transform var(--transition-fast) ease-out;
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+}
+
+.hover-scale {
+  transition: transform var(--transition-fast) ease-out;
+}
+
+.hover-scale:hover {
+  transform: scale(1.02);
+}
+
+.hover-glow {
+  transition: border-color var(--transition-fast) ease-out;
+}
+
+.hover-glow:hover {
+  border-color: var(--color-text-accent);
+}
+
+/* Loading states */
+.loading-dots {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.loading-dots span {
+  width: 4px;
+  height: 4px;
+  background-color: var(--color-text-accent);
+  border-radius: 50%;
+  animation: loadingDots 1.4s ease-in-out infinite both;
+}
+
+.loading-dots span:nth-child(1) { animation-delay: -0.32s; }
+.loading-dots span:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes loadingDots {
+  0%, 80%, 100% {
+    transform: scale(0);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Page transitions */
+.page-enter {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.page-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity var(--transition-normal) ease-out,
+              transform var(--transition-normal) ease-out;
+}
+
+.page-exit {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.page-exit-active {
+  opacity: 0;
+  transform: translateY(-20px);
+  transition: opacity var(--transition-fast) ease-in,
+              transform var(--transition-fast) ease-in;
+}
+
+/* Modal animations */
+.modal-overlay {
+  background-color: rgba(0, 0, 0, 0.7);
+  opacity: 0;
+  transition: opacity var(--transition-normal) ease-out;
+}
+
+.modal-overlay.active {
+  opacity: 1;
+}
+
+.modal-content {
+  opacity: 0;
+  transform: translateY(20px) scale(0.95);
+  transition: all var(--transition-normal) ease-out;
+}
+
+.modal-content.active {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+/* Responsive animations - reduce motion on mobile */
+@media (max-width: 768px) {
+  .hover-lift:hover,
+  .hover-scale:hover {
+    transform: none;
+  }
+  
+  * {
+    animation-duration: 200ms !important;
+  }
+}
+
+/* Respect user preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
