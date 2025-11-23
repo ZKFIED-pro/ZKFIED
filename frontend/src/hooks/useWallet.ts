@@ -1,5 +1,6 @@
 import { useWalletStore } from '@/stores/walletStore'
 import { WalletType, TransactionRequest, TransactionResult } from '@/types'
+import { useWebZjs } from './useWebZjs'
 
 export const useWallet = () => {
   const {
@@ -17,10 +18,32 @@ export const useWallet = () => {
     sendTransaction,
     signMessage
   } = useWalletStore()
+  
+  const webzjs = useWebZjs()
 
   const connect = async (walletType: WalletType) => {
     try {
-      if (walletType === 'ywallet') {
+      if (walletType === 'webzjs') {
+        // Connect to WebZjs Snap for Zcash
+        console.log('Connecting to WebZjs Snap...')
+        const connected = await webzjs.connectSnap()
+        
+        if (connected) {
+          // Get viewing key to establish connection
+          try {
+            const viewingKey = await webzjs.getViewingKey(window.location.origin)
+            console.log('WebZjs connected with viewing key:', viewingKey.substring(0, 20) + '...')
+            
+            // Update wallet store with WebZjs connection
+            await connectWalletStore(walletType)
+          } catch (error) {
+            console.error('Failed to get viewing key:', error)
+            throw new Error('Failed to establish WebZjs connection')
+          }
+        } else {
+          throw new Error('Failed to connect to WebZjs Snap')
+        }
+      } else if (walletType === 'ywallet') {
         // TODO: Integrate yWallet for Zcash
         console.log('TODO: Integrate yWallet SDK')
         console.log('Will connect to Zcash via yWallet...')
@@ -79,14 +102,30 @@ export const useWallet = () => {
     memo?: string
     privacyLevel: 'transparent' | 'shielded'
   }) => {
-    // TODO: Create shielded transaction using Zcash primitives
-    console.log('TODO: Create shielded transaction', params)
-    
-    return await submitTransaction({
-      type: 'evidence_submission',
-      chain: 'zcash',
-      data: params
-    })
+    try {
+      console.log('Creating shielded transaction with WebZjs:', params)
+      
+      // Use WebZjs to sign the transaction
+      const signedTx = await webzjs.signPczt(
+        params.recipient,
+        params.amount,
+        params.memo
+      )
+      
+      console.log('Transaction signed:', signedTx.substring(0, 20) + '...')
+      
+      return await submitTransaction({
+        type: 'evidence_submission',
+        chain: 'zcash',
+        data: {
+          ...params,
+          signedTransaction: signedTx
+        }
+      })
+    } catch (error) {
+      console.error('Failed to create shielded transaction:', error)
+      throw error
+    }
   }
 
   // Utility functions for NEAR-specific operations
@@ -126,6 +165,18 @@ export const useWallet = () => {
     
     // Chain-specific utilities
     createShieldedTransaction,
-    callNearContract
+    callNearContract,
+    
+    // WebZjs specific
+    webzjs: {
+      isConnected: webzjs.isConnected,
+      isInstalled: webzjs.isInstalled,
+      getViewingKey: webzjs.getViewingKey,
+      getSeedFingerprint: webzjs.getSeedFingerprint,
+      setBirthdayBlock: webzjs.setBirthdayBlock,
+      getSnapState: webzjs.getSnapState,
+      setSnapState: webzjs.setSnapState,
+      error: webzjs.error,
+    }
   }
 }

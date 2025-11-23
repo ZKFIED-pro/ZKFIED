@@ -47,6 +47,7 @@ export type WalletType =
   | 'near-wallet'
   | 'here-wallet'
   | 'metamask'
+  | 'webzjs'
 
 export interface WalletConnection {
   type: WalletType
@@ -83,4 +84,22 @@ export interface ChainInfo {
   rpcUrl: string
   explorerUrl: string
   testnet?: boolean
+}
+
+// MetaMask/Ethereum provider types
+interface RequestArguments {
+  method: string
+  params?: unknown[] | object
+}
+
+export interface EthereumProvider {
+  request(args: RequestArguments): Promise<any>
+  isMetaMask?: boolean
+  selectedAddress?: string | null
+}
+
+declare global {
+  interface Window {
+    ethereum?: EthereumProvider
+  }
 }
