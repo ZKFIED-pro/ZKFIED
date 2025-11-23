@@ -6,10 +6,9 @@ import { Shield, ExternalLink, CheckCircle, AlertCircle } from 'lucide-react'
 
 const Navbar: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  const [isConnecting, setIsConnecting] = useState(false)
   const [showWalletDropdown, setShowWalletDropdown] = useState(false)
   const location = useLocation()
-  const { connect, webzjs } = useWallet()
+  const { webzjs } = useWallet()
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Close dropdown when clicking outside
@@ -37,55 +36,9 @@ const Navbar: React.FC = () => {
     return location.pathname.startsWith(href)
   }
 
-  const handleConnectWallet = async () => {
-    try {
-      setIsConnecting(true)
-      setShowWalletDropdown(false)
-      
-      // Check if MetaMask is available
-      if (typeof window.ethereum === 'undefined') {
-        const installMetaMask = confirm('MetaMask is required to use WebZjs wallet. Would you like to install MetaMask now?')
-        if (installMetaMask) {
-          window.open('https://metamask.io/download/', '_blank')
-        }
-        return
-      }
-
-      console.log('Attempting to connect WebZjs wallet...')
-      await connect('webzjs')
-      console.log('WebZjs wallet connected successfully')
-    } catch (error: any) {
-      console.error('Wallet connection failed:', error)
-      
-      let errorMessage = error.message || 'Failed to connect wallet'
-      let shouldOpenInstallPage = false
-      let shouldOpenMetaMaskPage = false
-      
-      if (error.message?.includes('MetaMask Snaps are not supported') || error.message?.includes('newer version')) {
-        errorMessage = 'MetaMask Snaps not supported.\n\nYou need MetaMask Flask or a newer version (v10.25.0+) that supports Snaps.\n\nWould you like to download MetaMask Flask?'
-        shouldOpenMetaMaskPage = true
-      } else if (error.message?.includes('not available') || error.message?.includes('install it manually') || error.message?.includes('not found')) {
-        errorMessage = 'WebZjs snap not found in the registry.\n\nWould you like to install it from the official page?'
-        shouldOpenInstallPage = true
-      } else if (error.message?.includes('cancelled') || error.message?.includes('rejected')) {
-        errorMessage = 'WebZjs snap installation was cancelled.\n\nPlease try again and approve the installation to continue.'
-      } else if (error.message?.includes('MetaMask is not installed')) {
-        errorMessage = 'MetaMask is not installed.\n\nWould you like to install MetaMask now?'
-        shouldOpenMetaMaskPage = true
-      }
-      
-      const userWantsToOpenPage = confirm(errorMessage)
-      
-      if (userWantsToOpenPage) {
-        if (shouldOpenInstallPage) {
-          window.open('https://webzjs.chainsafe.dev', '_blank')
-        } else if (shouldOpenMetaMaskPage) {
-          window.open('https://metamask.io/flask/', '_blank')
-        }
-      }
-    } finally {
-      setIsConnecting(false)
-    }
+  const handleConnectWallet = () => {
+    // Simply open the WebZjs installation page like the submit evidence page does
+    window.open('https://webzjs.chainsafe.dev', '_blank')
   }
 
   const handleInstallSnap = () => {
@@ -101,6 +54,14 @@ const Navbar: React.FC = () => {
         bgColor: 'border-green-400'
       }
     }
+    if (webzjs.isInstalled) {
+      return { 
+        text: 'WEBZJS_INSTALLED', 
+        icon: CheckCircle, 
+        color: 'text-blue-400',
+        bgColor: 'border-blue-400'
+      }
+    }
     if (webzjs.error) {
       return { 
         text: 'ERROR', 
@@ -110,8 +71,8 @@ const Navbar: React.FC = () => {
       }
     }
     return { 
-      text: 'CONNECT_WALLET', 
-      icon: Shield, 
+      text: 'INSTALL_WEBZJS', 
+      icon: null, 
       color: 'text-terminal-primary',
       bgColor: 'border-terminal-primary'
     }
@@ -186,27 +147,14 @@ const Navbar: React.FC = () => {
             ) : (
               <button 
                 onClick={handleConnectWallet}
-                disabled={isConnecting}
                 className={clsx(
                   'bracket-btn border-2 px-4 py-2 text-sm font-mono font-bold flex items-center gap-2',
-                  {
-                    'opacity-50 cursor-not-allowed': isConnecting,
-                    [getWalletStatus().color]: !isConnecting,
-                    [getWalletStatus().bgColor]: !isConnecting,
-                  }
+                  getWalletStatus().color,
+                  getWalletStatus().bgColor
                 )}
               >
-                {isConnecting ? (
-                  <>
-                    <div className="animate-spin h-4 w-4 border border-current border-t-transparent rounded-full"></div>
-                    CONNECTING...
-                  </>
-                ) : (
-                  <>
-                    <Shield size={16} />
-                    {getWalletStatus().text}
-                  </>
-                )}
+                {getWalletStatus().icon && React.createElement(getWalletStatus().icon, { size: 16 })}
+                {getWalletStatus().text}
               </button>
             )}
             
@@ -270,27 +218,14 @@ const Navbar: React.FC = () => {
                       setIsMobileMenuOpen(false)
                       handleConnectWallet()
                     }}
-                    disabled={isConnecting}
                     className={clsx(
                       'bracket-btn w-full border-2 px-4 py-2 text-sm font-mono font-bold flex items-center justify-center gap-2',
-                      {
-                        'opacity-50 cursor-not-allowed': isConnecting,
-                        [getWalletStatus().color]: !isConnecting,
-                        [getWalletStatus().bgColor]: !isConnecting,
-                      }
+                      getWalletStatus().color,
+                      getWalletStatus().bgColor
                     )}
                   >
-                    {isConnecting ? (
-                      <>
-                        <div className="animate-spin h-4 w-4 border border-current border-t-transparent rounded-full"></div>
-                        CONNECTING...
-                      </>
-                    ) : (
-                      <>
-                        <Shield size={16} />
-                        {getWalletStatus().text}
-                      </>
-                    )}
+                    {getWalletStatus().icon && React.createElement(getWalletStatus().icon, { size: 16 })}
+                    {getWalletStatus().text}
                   </button>
                 )}
               </div>
