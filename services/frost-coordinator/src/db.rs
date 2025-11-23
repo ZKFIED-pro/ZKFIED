@@ -78,6 +78,23 @@ pub struct NearCrossPost {
     pub confirmed_at: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvidenceCommitment {
+    pub id: i64,
+    pub evidence_id: String,
+    pub ipfs_cid: String,
+    pub board_id: String,
+    pub commitment_hash: Vec<u8>,
+    pub timestamp: i64,
+    pub zcash_txid: Option<String>,
+    pub zcash_block_height: Option<i64>,
+    pub near_txid: Option<String>,
+    pub near_block_height: Option<i64>,
+    pub status: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
 impl Database {
     pub async fn new(database_url: &str) -> Result<Self> {
         // Add mode=rwc for SQLite URLs (r=read, w=write, c=create)
@@ -598,6 +615,127 @@ impl Database {
     }
 
 
+    pub async fn insert_evidence_commitment(
+        &self,
+        evidence_id: &str,
+        ipfs_cid: &str,
+        board_id: &str,
+        commitment_hash: &[u8],
+        timestamp: i64,
+    ) -> Result<i64> {
+        let now = chrono::Utc::now().timestamp();
+        let result = sqlx::query(
+            r#"
+            INSERT INTO evidence_commitments
+            (evidence_id, ipfs_cid, board_id, commitment_hash, timestamp, created_at, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            "#
+        )
+        .bind(evidence_id)
+        .bind(ipfs_cid)
+        .bind(board_id)
+        .bind(commitment_hash)
+        .bind(timestamp)
+        .bind(now)
+        .bind(now)
+        .execute(&self.pool)
+        .await
+        .context("Failed to insert evidence commitment")?;
+
+        let id = result.last_insert_rowid();
+        tracing::info!("Evidence commitment inserted: {} (id: {})", evidence_id, id);
+        Ok(id)
+    }
+
+    pub async fn update_commitment_zcash_tx(
+        &self,
+        evidence_id: &str,
+        zcash_txid: &str,
+        block_height: i64,
+    ) -> Result<()> {
+        let now = chrono::Utc::now().timestamp();
+        sqlx::query(
+            r#"
+            UPDATE evidence_commitments
+            SET zcash_txid = ?1, zcash_block_height = ?2, updated_at = ?3
+            WHERE evidence_id = ?4
+            "#
+        )
+        .bind(zcash_txid)
+        .bind(block_height)
+        .bind(now)
+        .bind(evidence_id)
+        .execute(&self.pool)
+        .await
+        .context("Failed to update commitment Zcash tx")?;
+
+        tracing::info!("Commitment Zcash tx updated: {} -> {}", evidence_id, zcash_txid);
+        Ok(())
+    }
+
+    pub async fn update_commitment_near_tx(
+        &self,
+        evidence_id: &str,
+        near_txid: &str,
+        block_height: i64,
+    ) -> Result<()> {
+        let now = chrono::Utc::now().timestamp();
+        sqlx::query(
+            r#"
+            UPDATE evidence_commitments
+            SET near_txid = ?1, near_block_height = ?2, status = 'registered', updated_at = ?3
+            WHERE evidence_id = ?4
+            "#
+        )
+        .bind(near_txid)
+        .bind(block_height)
+        .bind(now)
+        .bind(evidence_id)
+        .execute(&self.pool)
+        .await
+        .context("Failed to update commitment NEAR tx")?;
+
+        tracing::info!("Commitment NEAR tx updated: {} -> {}", evidence_id, near_txid);
+        Ok(())
+    }
+
+    pub async fn get_commitment_by_evidence_id(&self, evidence_id: &str) -> Result<Option<EvidenceCommitment>> {
+        let record = sqlx::query_as::<_, EvidenceCommitment>(
+            r#"
+            SELECT id, evidence_id, ipfs_cid, board_id, commitment_hash, timestamp,
+                   zcash_txid, zcash_block_height, near_txid, near_block_height,
+                   status, created_at, updated_at
+            FROM evidence_commitments
+            WHERE evidence_id = ?1
+            "#
+        )
+        .bind(evidence_id)
+        .fetch_optional(&self.pool)
+        .await
+        .context("Failed to fetch evidence commitment")?;
+
+        Ok(record)
+    }
+
+    pub async fn get_commitments_by_board(&self, board_id: &str) -> Result<Vec<EvidenceCommitment>> {
+        let records = sqlx::query_as::<_, EvidenceCommitment>(
+            r#"
+            SELECT id, evidence_id, ipfs_cid, board_id, commitment_hash, timestamp,
+                   zcash_txid, zcash_block_height, near_txid, near_block_height,
+                   status, created_at, updated_at
+            FROM evidence_commitments
+            WHERE board_id = ?1
+            ORDER BY timestamp DESC
+            "#
+        )
+        .bind(board_id)
+        .fetch_all(&self.pool)
+        .await
+        .context("Failed to fetch board commitments")?;
+
+        Ok(records)
+    }
+
     pub async fn get_stats(&self) -> Result<DatabaseStats> {
         let row = sqlx::query(
             r#"
@@ -717,6 +855,26 @@ impl sqlx::FromRow<'_, sqlx::sqlite::SqliteRow> for NearCrossPost {
             status: row.try_get("status")?,
             posted_at: row.try_get("posted_at")?,
             confirmed_at: row.try_get("confirmed_at")?,
+        })
+    }
+}
+
+impl sqlx::FromRow<'_, sqlx::sqlite::SqliteRow> for EvidenceCommitment {
+    fn from_row(row: &sqlx::sqlite::SqliteRow) -> sqlx::Result<Self> {
+        Ok(Self {
+            id: row.try_get("id")?,
+            evidence_id: row.try_get("evidence_id")?,
+            ipfs_cid: row.try_get("ipfs_cid")?,
+            board_id: row.try_get("board_id")?,
+            commitment_hash: row.try_get("commitment_hash")?,
+            timestamp: row.try_get("timestamp")?,
+            zcash_txid: row.try_get("zcash_txid")?,
+            zcash_block_height: row.try_get("zcash_block_height")?,
+            near_txid: row.try_get("near_txid")?,
+            near_block_height: row.try_get("near_block_height")?,
+            status: row.try_get("status")?,
+            created_at: row.try_get("created_at")?,
+            updated_at: row.try_get("updated_at")?,
         })
     }
 }

@@ -15,6 +15,7 @@ use zkfied_frost_coordinator::{
     ipfs_client::IpfsClient,
     lightclient::LightClient,
     metrics,
+    near_client::{NearTransactionManager, NearNetwork},
     rpc_client::ZcashRpcClient,
     orchestrator::{
         EvidenceOrchestrator,
@@ -113,11 +114,30 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("Using Zcash params directory: {}", params_dir.display());
 
+    let near_contract_id = std::env::var("NEAR_CONTRACT_ID")
+        .unwrap_or_else(|_| "evidence-registry.testnet".to_string())
+        .parse()
+        .expect("Invalid NEAR contract ID");
+
+    let near_network = match std::env::var("NEAR_NETWORK").as_deref() {
+        Ok("mainnet") => NearNetwork::Mainnet,
+        Ok("testnet") | _ => NearNetwork::Testnet,
+    };
+
+    let near_manager = Arc::new(NearTransactionManager::new(
+        near_contract_id,
+        near_network,
+        db.clone(),
+    ));
+
+    tracing::info!("NEAR transaction manager initialized");
+
     tracing::info!("Initializing Evidence Orchestrator with REAL ZK proof generation");
     let orchestrator = Arc::new(EvidenceOrchestrator::new(
         db.clone(),
         ipfs.clone(),
         rpc.clone(),
+        near_manager.clone(),
         params_dir,
     )?);
 

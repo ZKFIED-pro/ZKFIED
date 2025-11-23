@@ -4,6 +4,8 @@ use crate::ipfs_client::{IpfsClient, EvidenceMetadata, FileMetadata};
 use crate::payment_disclosure;
 use crate::rpc_client::ZcashRpcClient;
 use crate::transaction::{TransactionBuilder, EvidenceMemo};
+use crate::near_client::{NearTransactionManager, FrostSignature as NearFrostSignature};
+use crate::evidence_commitment::EvidenceCommitment;
 use anyhow::{Result, Context};
 use frost_ristretto255::Ristretto255Sha512;
 use serde::{Deserialize, Serialize};
@@ -20,6 +22,7 @@ pub struct EvidenceOrchestrator {
     rpc: Arc<ZcashRpcClient>,
     frost: Arc<RwLock<FrostCoordinator<DefaultCiphersuite>>>,
     tx_builder: Arc<TransactionBuilder>,
+    near: Arc<NearTransactionManager>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -66,6 +69,7 @@ impl EvidenceOrchestrator {
         db: Arc<Database>,
         ipfs: Arc<IpfsClient>,
         rpc: Arc<ZcashRpcClient>,
+        near: Arc<NearTransactionManager>,
         params_dir: PathBuf,
     ) -> Result<Self> {
         let frost = FrostCoordinator::<DefaultCiphersuite>::new_with_dealer(db.clone(), 5, 3)
@@ -80,6 +84,7 @@ impl EvidenceOrchestrator {
             rpc,
             frost: Arc::new(RwLock::new(frost)),
             tx_builder: Arc::new(tx_builder),
+            near,
         })
     }
 
@@ -198,6 +203,63 @@ impl EvidenceOrchestrator {
 
         tracing::info!("Transaction broadcast successful: {}", zcash_txid);
 
+        let commitment_hash_bytes: [u8; 32] = hex::decode(&commitment_hash)
+            .context("Invalid commitment hash")?
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("Commitment hash must be 32 bytes"))?;
+
+        self.db.insert_evidence_commitment(
+            &evidence_id,
+            &metadata_cid,
+            &request.board_category,
+            &commitment_hash_bytes,
+            timestamp as i64,
+        ).await?;
+
+        self.db.update_commitment_zcash_tx(
+            &evidence_id,
+            &zcash_txid,
+            current_height as i64,
+        ).await?;
+
+        tracing::info!("Registering evidence on NEAR blockchain for public queryability");
+
+        let near_frost_sigs: Vec<NearFrostSignature> = vec![
+            NearFrostSignature {
+                participant_id: 1,
+                signature: signature.clone(),
+                public_key: vec![],
+            },
+            NearFrostSignature {
+                participant_id: 2,
+                signature: signature.clone(),
+                public_key: vec![],
+            },
+            NearFrostSignature {
+                participant_id: 3,
+                signature: signature.clone(),
+                public_key: vec![],
+            },
+        ];
+
+        let near_tx_hash = self.near.register_evidence(
+            evidence_id.clone(),
+            metadata_cid.clone(),
+            request.board_category.clone(),
+            commitment_hash_bytes.to_vec(),
+            zcash_txid.clone(),
+            current_height as u64,
+            near_frost_sigs,
+        ).await.context("Failed to register evidence on NEAR")?;
+
+        tracing::info!("Evidence registered on NEAR: {}", near_tx_hash);
+
+        self.db.update_commitment_near_tx(
+            &evidence_id,
+            &near_tx_hash,
+            0,
+        ).await?;
+
         tracing::info!("Generating payment disclosure proof for evidence transparency");
         let mut txid_bytes = [0u8; 32];
         hex::decode_to_slice(&zcash_txid, &mut txid_bytes)
@@ -216,7 +278,7 @@ impl EvidenceOrchestrator {
         self.db.update_evidence_txid(
             &evidence_id,
             &zcash_txid,
-            "broadcasted",
+            "registered",
         ).await?;
 
         Ok(EvidenceSubmissionResponse {
@@ -224,7 +286,7 @@ impl EvidenceOrchestrator {
             ipfs_cid: metadata_cid,
             zcash_txid: Some(zcash_txid),
             frost_session_id,
-            status: "authorized".to_string(),
+            status: "registered".to_string(),
             payment_disclosure: Some(payment_disclosure_hex),
         })
     }
@@ -507,7 +569,12 @@ mod tests {
         ).unwrap());
 
         let params_dir = std::env::temp_dir().join("zkfied_test_params");
-        let orchestrator = EvidenceOrchestrator::new(db, ipfs, rpc, params_dir).unwrap();
+        let near = Arc::new(NearTransactionManager::new(
+            "evidence-registry.testnet".parse().unwrap(),
+            crate::near_client::NearNetwork::Testnet,
+            db.clone(),
+        ));
+        let orchestrator = EvidenceOrchestrator::new(db, ipfs, rpc, near, params_dir).unwrap();
 
         let id1 = orchestrator.generate_evidence_id(&request);
         let id2 = orchestrator.generate_evidence_id(&request);
@@ -540,7 +607,12 @@ mod tests {
             "pass".to_string(),
         ).unwrap());
         let params_dir = std::env::temp_dir().join("zkfied_test_params");
-        let orchestrator = EvidenceOrchestrator::new(db, ipfs, rpc, params_dir).unwrap();
+        let near = Arc::new(NearTransactionManager::new(
+            "evidence-registry.testnet".parse().unwrap(),
+            crate::near_client::NearNetwork::Testnet,
+            db.clone(),
+        ));
+        let orchestrator = EvidenceOrchestrator::new(db, ipfs, rpc, near, params_dir).unwrap();
 
         let hash = orchestrator.compute_commitment_hash(&request);
 

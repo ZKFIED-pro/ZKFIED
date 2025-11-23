@@ -36,6 +36,8 @@ pub fn generate_with_dealer<C: frost::Ciphersuite>(
     max_signers: u16,
     min_signers: u16,
 ) -> Result<(BTreeMap<ParticipantId, KeyPackage<C>>, PublicKeyPackage<C>), FrostError> {
+    tracing::warn!("DEPRECATED: Using centralized dealer for key generation. Use DKG ceremony instead.");
+
     let mut rng = OsRng;
 
     let (shares, pubkeys) = frost::keys::generate_with_dealer(
@@ -63,6 +65,7 @@ pub fn generate_with_dealer<C: frost::Ciphersuite>(
 
     Ok((key_packages, pubkeys))
 }
+
 pub fn signing_round1<C: frost::Ciphersuite>(
     key_package: &KeyPackage<C>,
 ) -> (SigningNonces<C>, SigningCommitments<C>) {
