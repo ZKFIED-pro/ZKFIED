@@ -24,21 +24,13 @@ export const useWallet = () => {
   const connect = async (walletType: WalletType) => {
     try {
       if (walletType === 'webzjs') {
-        // Connect to WebZjs Snap for Zcash
-        console.log('Connecting to WebZjs Snap...')
         const connected = await webzjs.connectSnap()
         
         if (connected) {
-          // Get viewing key to establish connection
           try {
             const viewingKey = await webzjs.getViewingKey(window.location.origin)
-            console.log('WebZjs connected with viewing key:', viewingKey.substring(0, 20) + '...')
-            
-            // Update wallet store with WebZjs connection
             await connectWalletStore(walletType)
           } catch (error) {
-            console.error('Failed to get viewing key:', error)
-            throw new Error('Failed to establish WebZjs connection')
           }
         } else {
           throw new Error('Failed to connect to WebZjs Snap')
@@ -176,6 +168,7 @@ export const useWallet = () => {
       setBirthdayBlock: webzjs.setBirthdayBlock,
       getSnapState: webzjs.getSnapState,
       setSnapState: webzjs.setSnapState,
+      signPczt: webzjs.signPczt,
       error: webzjs.error,
     }
   }

@@ -14,12 +14,15 @@ const WebZjsWallet: React.FC<WebZjsWalletProps> = ({ onConnect }) => {
 
   useEffect(() => {
     if (webzjs.isConnected) {
-      // Get seed fingerprint for display
       webzjs.getSeedFingerprint()
         .then(setSeedFingerprint)
         .catch(console.error)
     }
   }, [webzjs.isConnected])
+
+  if (webzjs.isConnected) {
+    return null
+  }
 
   const handleConnect = async () => {
     try {
@@ -27,7 +30,6 @@ const WebZjsWallet: React.FC<WebZjsWalletProps> = ({ onConnect }) => {
       await connect('webzjs')
       onConnect?.(true)
     } catch (error) {
-      console.error('WebZjs connection failed:', error)
       onConnect?.(false)
     } finally {
       setConnecting(false)
@@ -108,40 +110,6 @@ const WebZjsWallet: React.FC<WebZjsWalletProps> = ({ onConnect }) => {
     )
   }
 
-  if (webzjs.isConnected) {
-    return (
-      <div className="st-card">
-        <div className="st-card-inner">
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
-            <CheckCircle size={20} style={{ marginRight: '12px', color: '#00ff88' }} />
-            <h3 style={{ fontSize: '14px', margin: 0 }}>WebZjs Connected</h3>
-          </div>
-          
-          <div style={{ marginBottom: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <span style={{ fontSize: '11px', color: 'rgb(160, 160, 160)' }}>Status:</span>
-              <span style={{ fontSize: '11px', color: '#00ff88' }}>Connected</span>
-            </div>
-            
-            {seedFingerprint && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontSize: '11px', color: 'rgb(160, 160, 160)' }}>Seed Fingerprint:</span>
-                <span style={{ fontSize: '11px', color: 'white', fontFamily: 'monospace' }}>
-                  {seedFingerprint.substring(0, 8)}...
-                </span>
-              </div>
-            )}
-          </div>
-
-          <div style={{ padding: '12px', border: '1px solid rgb(52, 52, 52)', background: 'rgba(0, 255, 136, 0.05)' }}>
-            <p style={{ fontSize: '10px', color: 'rgb(160, 160, 160)', margin: 0, lineHeight: '14px' }}>
-              Your Zcash wallet is ready for private transactions. You can now submit shielded evidence to the ZKFIED network.
-            </p>
-          </div>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="st-card">

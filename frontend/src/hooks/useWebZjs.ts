@@ -47,17 +47,27 @@ export const useWebZjs = (): WebZjsState & WebZjsActions => {
         throw new Error('MetaMask is not installed. Please install MetaMask and try again.')
       }
 
+
+      // Try to connect to MetaMask first
+      try {
+        await window.ethereum.request({ method: 'eth_requestAccounts' })
+        console.log('MetaMask connected successfully')
+      } catch (err: any) {
+        console.error('Failed to connect to MetaMask:', err)
+        if (err.code === 4001) {
+          throw new Error('Please approve the connection to MetaMask to continue.')
+        }
+        throw new Error('Failed to connect to MetaMask. Please try again.')
+      }
+
       // First try to detect Snaps support
       let snapsSupported = false
       try {
-        await window.ethereum.request({ method: 'wallet_getSnaps' })
+        const snaps = await window.ethereum.request({ method: 'wallet_getSnaps' })
         snapsSupported = true
+        console.log('MetaMask Snaps support detected. Existing snaps:', snaps)
       } catch (err: any) {
-        console.error('Snaps detection failed:', err)
-        if (err.code === -32601) {
-          throw new Error('MetaMask Snaps are not supported. You need MetaMask Flask or a newer version (v10.25.0+) that supports Snaps.')
-        }
-        throw new Error('Unable to detect MetaMask Snaps support. Please ensure you have a compatible MetaMask version.')
+        console.error('Snaps detection failed:', err) 
       }
 
       if (!snapsSupported) {
@@ -90,7 +100,7 @@ export const useWebZjs = (): WebZjsState & WebZjsActions => {
         return isConnected
       }
 
-      // Try to install/request the snap
+    
       console.log('Requesting WebZjs snap installation...')
       try {
         const requestResult = await window.ethereum.request({
@@ -104,7 +114,7 @@ export const useWebZjs = (): WebZjsState & WebZjsActions => {
         
         console.log('Snap installation result:', requestResult)
 
-        // Verify installation
+        
         const updatedSnaps = await window.ethereum.request({
           method: 'wallet_getSnaps',
         })
