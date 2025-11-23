@@ -1,14 +1,14 @@
-# ZKFIED - Censorship-Proof Whistleblower Platform
+# ZKFIED is our Censorship Whistleblower Platform.
 
-**Zcash Shielded Transactions + FROST Threshold Signatures + Zero-Knowledge Attestations + IPFS + Tor/I2P + NEAR + Mina Protocol**
+** We're using Zcash Shielded Transactions, FROST Threshold Signatures, ZK Attestations, IPFS, Tor/I2P, NEAR + Mina Protocol**
 
 Production deployment: https://zkfied.vercel.app
 
 ---
 
-## THE PROBLEM: WHY EXISTING WHISTLEBLOWER PLATFORMS FAIL
+## THE PROBLEM: WHISTLEBLOWER PLATFORMS HAVE NEVER DONE THEIR JOB AT PROTECTING
 
-### Historical Failures
+### a bit of history
 
 **1. SecureDrop (2013-present)**
 - Centralized server infrastructure - single point of failure
@@ -36,7 +36,7 @@ Production deployment: https://zkfied.vercel.app
 - **Edward Snowden (2013):** Required direct journalist contact + asylum in Russia to avoid prosecution
 - **Chelsea Manning (2010):** Confided in Adrian Lamo who reported her to FBI, sentenced to 35 years
 
-### Core Failure Modes
+### why it has failed 
 1. **Server Seizure:** Government can subpoena/seize centralized servers (Lavabit 2013)
 2. **Metadata Leakage:** Email headers, IP logs, printer tracking dots reveal source identity
 3. **Single Point of Compromise:** One admin key compromised = entire platform compromised
@@ -48,7 +48,7 @@ Production deployment: https://zkfied.vercel.app
 
 ## THE SOLUTION: ZKFIED ARCHITECTURE
 
-ZKFIED eliminates single points of failure through:
+We studied what happened and created ZKFIED to eliminate single points of failure with the correct infra:
 1. **Zcash Shielded Pool** - Censorship-resistant transaction layer (launched 2016, $2B+ market cap)
 2. **FROST Threshold Signatures** - 3-of-5 distributed signing, no single admin key
 3. **IPFS Content Addressing** - Decentralized storage, cryptographic integrity guarantees
@@ -58,13 +58,13 @@ ZKFIED eliminates single points of failure through:
 7. **NEAR Protocol Registry** - Cross-chain evidence anchoring, public verifiability
 8. **Mina zkApps** - Succinct credential proofs, professional identity verification
 
-No servers to seize. No admins with god-mode. No metadata to leak. No evidence to tamper. No IP addresses to trace.
+This was it has no servers to seize, no admins, no metadata to leakn no evidence to tamper and no IP addresses to trace.
 
 ---
 
-## TECHNICAL ARCHITECTURE
+## TECHNICAL 
 
-### System Components
+### our system
 
 ```
 Frontend (React/Vite/TS)
@@ -120,14 +120,14 @@ External Services
 **Curve:** Ed25519 (ristretto255 group)
 **Configuration:** 3-of-5 threshold (requires 3 of 5 signers to approve evidence submission)
 
-#### Why FROST?
+#### FROST?
 
-Traditional multisig requires N signatures on-chain. FROST produces a single aggregated signature indistinguishable from single-key signatures. Benefits:
+Traditional multisig requires N signatures on-chain. FROST gives a single aggregated signature indistinguishable from single-key signatures. Benefits:
 - No on-chain indication of threshold governance
 - Constant signature size (64 bytes) regardless of threshold
 - Rerandomization prevents signature linkability across evidence submissions
 
-#### Distributed Key Generation (DKG)
+#### Distributed Key Generation 
 
 **Implementation:** `frost_impl.rs:25-58`
 
@@ -152,7 +152,7 @@ pub async fn perform_keygen(&mut self) -> Result<Vec<(Identifier, KeyPackage)>> 
 }
 ```
 
-**What happens:**
+**what happens:**
 1. Dealer generates random polynomial f(x) of degree t-1 (where t=3)
 2. Secret key sk = f(0), never reconstructed in memory
 3. Each signer i receives share s_i = f(i)
@@ -233,7 +233,7 @@ pub async fn sign_message(&self, message: &[u8], signer_ids: &[Identifier])
 
 ---
 
-### 2. Zero-Knowledge Email Attestation
+### 2. ZK Email Attestation
 
 **Location:** `circuits/ViewingKeyAuthorization.circom`
 
@@ -243,7 +243,7 @@ pub async fn sign_message(&self, message: &[u8], signer_ids: &[Identifier])
 **Proof Size:** 128 bytes (2 G1 points + 1 G2 point)
 **Verification Time:** ~1.5ms
 
-#### The Privacy Problem
+#### why we did this
 
 Whistleblowers need to prove:
 - "I control an email at @hospital.org" (proves healthcare worker status)
@@ -254,7 +254,7 @@ WITHOUT revealing:
 - Which hospital/department
 - Which government agency
 
-Traditional solutions leak metadata:
+other solutions leak metadata:
 - Email headers reveal sender
 - DKIM signatures reveal domain but not full privacy
 - OAuth tokens linkable across submissions
@@ -382,7 +382,7 @@ app.post("/challenge", async (req, res) => {
 4. Email sent via Resend SMTP (onboarding@resend.dev for testnet)
 5. Returns challengeId for verification step
 
-#### Domain-Based Board Classification
+#### Domain Board Classification
 
 **Location:** `services/attestation/src/categories.ts:9-53`
 
@@ -447,7 +447,7 @@ Example:
 - `whistleblower@fbi.gov` → [CIVIL_SOCIETY, GOVERNMENT] → 0b00001 | 0b00010 = 0b00011 = 3
 - `reporter@nytimes.com` → [CIVIL_SOCIETY, MEDIA] → 0b00001 | 0b10000 = 0b10001 = 17
 
-**Why deterministic classification?**
+**why deterministic classification?**
 
 Alternative: AI/LLM-based classification (OpenAI, Claude API)
 - Introduces API dependency (centralization)
@@ -455,7 +455,7 @@ Alternative: AI/LLM-based classification (OpenAI, Claude API)
 - Leaks email to third-party API
 - Adds latency (200-500ms per request)
 
-Regex-based classification:
+Regex classification:
 - Deterministic (same input = same output always)
 - Zero external dependencies
 - Zero latency
