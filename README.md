@@ -1,12 +1,12 @@
-# ZKFIED is our Censorship Whistleblower Platform.
+# TLDR ZKFIED is our censorship whistleblower platform.
 
-** We're using Zcash Shielded Transactions, FROST Threshold Signatures, ZK Attestations, IPFS, Tor/I2P, NEAR + Mina Protocol**
+**We're using Zcash Shielded Transactions, FROST Threshold Signatures, ZK Attestations, IPFS, Tor/I2P, NEAR + Mina Protocol**
 
 Production deployment: https://zkfied.vercel.app
 
 ---
 
-## THE PROBLEM: WHISTLEBLOWER PLATFORMS HAVE NEVER DONE THEIR JOB AT PROTECTING
+## WHISTLEBLOWER PLATFORMS HAVE NEVER DONE THEIR JOB AT PROTECTING
 
 ### a bit of history
 
