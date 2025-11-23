@@ -2,7 +2,7 @@ use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::UnorderedMap;
 use near_sdk::json_types::U128;
 use near_sdk::serde::{Deserialize, Serialize};
-use near_sdk::{env, near_bindgen, AccountId, Balance, BorshStorageKey, PanicOnDefault, Promise, PromiseError};
+use near_sdk::{env, near_bindgen, AccountId, NearToken, Gas, BorshStorageKey, PanicOnDefault, Promise, PromiseError, require};
 
 #[derive(BorshSerialize, BorshStorageKey)]
 pub enum StorageKey {
@@ -75,11 +75,11 @@ impl ZKFIEDTipping {
         let tipper = env::predecessor_account_id();
         let amount = env::attached_deposit();
 
-        require!(amount > 0, "Must attach NEAR for tip");
+        require!(amount > NearToken::from_yoctonear(0), "Must attach NEAR for tip");
 
         let tip = Tip {
             tipper: tipper.clone(),
-            amount: U128(amount),
+            amount: U128(amount.as_yoctonear()),
             currency: "NEAR".to_string(),
             message,
             timestamp: env::block_timestamp(),
@@ -96,7 +96,7 @@ impl ZKFIEDTipping {
             });
 
         tip_pool.tips.push(tip);
-        tip_pool.total_amount = U128(tip_pool.total_amount.0 + amount);
+        tip_pool.total_amount = U128(tip_pool.total_amount.0 + amount.as_yoctonear());
 
         self.evidence_tips.insert(&evidence_id, &tip_pool);
 
@@ -168,8 +168,8 @@ impl ZKFIEDTipping {
             .function_call(
                 "execute_intent".to_string(),
                 intent_data.into_bytes(),
-                intent.amount.0,
-                5_000_000_000_000,
+                NearToken::from_yoctonear(intent.amount.0),
+                Gas::from_gas(5_000_000_000_000),
             )
             .then(
                 Promise::new(env::current_account_id())
@@ -179,8 +179,8 @@ impl ZKFIEDTipping {
                             "beneficiary": beneficiary,
                             "amount": intent.amount,
                         }).to_string().into_bytes(),
-                        0,
-                        5_000_000_000_000,
+                        NearToken::from_yoctonear(0),
+                        Gas::from_gas(5_000_000_000_000),
                     )
             )
     }
@@ -203,7 +203,7 @@ impl ZKFIEDTipping {
                 beneficiary
             ));
 
-            Promise::new(beneficiary).transfer(amount.0);
+            Promise::new(beneficiary).transfer(NearToken::from_yoctonear(amount.0));
         }
     }
 

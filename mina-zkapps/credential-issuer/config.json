@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "deployAliases": {
+    "mrhashfox": {
+      "networkId": "testnet",
+      "url": "https://api.minascan.io/node/devnet/v1/graphql",
+      "keyPath": "keys/mrhashfox.json",
+      "feepayerKeyPath": "/Users/alex/.cache/zkapp-cli/keys/mrhashfox.json",
+      "feepayerAlias": "mrhashfox",
+      "fee": "0.1",
+      "smartContract": "CredentialIssuer"
+    }
+  }
+}

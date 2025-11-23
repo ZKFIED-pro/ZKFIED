@@ -52,6 +52,16 @@ export interface AttestationGrant {
   boardsGranted?: number[]
 }
 
+export interface EmailAttestationRequest {
+  email: string
+  board_category: string
+}
+
+export interface EmailVerificationRequest {
+  email: string
+  verification_code: string
+}
+
 export interface SubmitEvidenceRequest {
   title: string
   description: string
@@ -193,6 +203,20 @@ class ZKFIEDApi {
 
   async getStats(): Promise<{ status: string; message: string }> {
     return this.request<{ status: string; message: string }>('/stats')
+  }
+
+  async requestEmailAttestation(request: EmailAttestationRequest): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>('/attestation/email/request', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    })
+  }
+
+  async verifyEmailAttestation(request: EmailVerificationRequest): Promise<AttestationGrant> {
+    return this.request<AttestationGrant>('/attestation/email/verify', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    })
   }
 }
 

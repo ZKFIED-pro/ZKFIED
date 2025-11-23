@@ -15,6 +15,11 @@ export class CredentialIssuer extends SmartContract {
   @state(PublicKey) issuerPublicKey = State<PublicKey>();
   @state(Field) credentialCount = State<Field>();
 
+  events = {
+    'CredentialIssued': Field,
+    'CredentialRevoked': Field,
+  };
+
   init() {
     super.init();
     this.issuerPublicKey.set(this.sender.getAndRequireSignature());
@@ -25,7 +30,7 @@ export class CredentialIssuer extends SmartContract {
     holderPublicKey: PublicKey,
     credentialType: Field,
     issuerSignature: Signature
-  ): Promise<Field> {
+  ) {
     const issuer = this.issuerPublicKey.getAndRequireEquals();
 
     const validSignature = issuerSignature.verify(issuer, [
@@ -46,8 +51,6 @@ export class CredentialIssuer extends SmartContract {
     this.credentialCount.set(count.add(1));
 
     this.emitEvent('CredentialIssued', credentialHash);
-
-    return credentialHash;
   }
 
   @method async verifyCredential(
@@ -55,7 +58,7 @@ export class CredentialIssuer extends SmartContract {
     credentialType: Field,
     timestamp: UInt64,
     boardType: Field
-  ): Promise<Bool> {
+  ) {
     const credentialHash = Poseidon.hash([
       ...holderPublicKey.toFields(),
       credentialType,
@@ -84,7 +87,8 @@ export class CredentialIssuer extends SmartContract {
       .equals(laborer)
       .and(boardType.equals(corporate));
 
-    return healthcareMatch.or(governmentMatch).or(corporateMatch);
+    const isValid = healthcareMatch.or(governmentMatch).or(corporateMatch);
+    isValid.assertTrue();
   }
 
   @method async revokeCredential(
