@@ -15,6 +15,7 @@ use zkfied_frost_coordinator::{
     ipfs_client::IpfsClient,
     lightclient::LightClient,
     metrics,
+    mina_verifier::MinaProofVerifier,
     near_client::{NearTransactionManager, NearNetwork},
     rpc_client::ZcashRpcClient,
     orchestrator::{
@@ -132,12 +133,27 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("NEAR transaction manager initialized");
 
+    let mina_graphql_endpoint = std::env::var("MINA_GRAPHQL_ENDPOINT")
+        .unwrap_or_else(|_| "https://api.minascan.io/node/devnet/v1/graphql".to_string());
+
+    let mina_zkapp_address = std::env::var("MINA_ZKAPP_ADDRESS")
+        .unwrap_or_else(|_| "B62qkYa1o6Mj6uTTjDQCob7FYZspuhkm4RRQhgJg9j4koEBWiSrTQrS".to_string());
+
+    let mina_verifier = Arc::new(MinaProofVerifier::new(
+        mina_graphql_endpoint.clone(),
+        mina_zkapp_address.clone(),
+        db.clone(),
+    ));
+
+    tracing::info!("Mina proof verifier initialized: {}", mina_zkapp_address);
+
     tracing::info!("Initializing Evidence Orchestrator with REAL ZK proof generation");
     let orchestrator = Arc::new(EvidenceOrchestrator::new(
         db.clone(),
         ipfs.clone(),
         rpc.clone(),
         near_manager.clone(),
+        mina_verifier.clone(),
         params_dir,
     )?);
 

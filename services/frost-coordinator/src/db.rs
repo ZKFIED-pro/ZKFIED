@@ -95,6 +95,32 @@ pub struct EvidenceCommitment {
     pub updated_at: i64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MinaCredentialProofRecord {
+    pub id: i64,
+    pub credential_hash: String,
+    pub holder_public_key: String,
+    pub credential_type: i64,
+    pub timestamp: i64,
+    pub proof_data: String,
+    pub board_type: i64,
+    pub is_revoked: i64,
+    pub verified_at: i64,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FrostAuthorizationRecord {
+    pub id: i64,
+    pub authorization_id: String,
+    pub credential_hash: String,
+    pub board_type: i64,
+    pub frost_signature: Vec<u8>,
+    pub authorized_at: i64,
+    pub expires_at: Option<i64>,
+    pub created_at: i64,
+}
+
 impl Database {
     pub async fn new(database_url: &str) -> Result<Self> {
         // Add mode=rwc for SQLite URLs (r=read, w=write, c=create)
@@ -761,6 +787,114 @@ impl Database {
             total_near_posts: row.get(5),
         })
     }
+
+    pub async fn store_mina_credential_proof(
+        &self,
+        credential_hash: &str,
+        holder_public_key: &str,
+        credential_type: u32,
+        timestamp: u64,
+        proof_data: &str,
+        board_type: u32,
+    ) -> Result<i64> {
+        let now = chrono::Utc::now().timestamp();
+        let result = sqlx::query(
+            r#"
+            INSERT INTO mina_credential_proofs
+            (credential_hash, holder_public_key, credential_type, timestamp, proof_data, board_type, verified_at, created_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            "#
+        )
+        .bind(credential_hash)
+        .bind(holder_public_key)
+        .bind(credential_type as i64)
+        .bind(timestamp as i64)
+        .bind(proof_data)
+        .bind(board_type as i64)
+        .bind(now)
+        .bind(now)
+        .execute(&self.pool)
+        .await
+        .context("Failed to store Mina credential proof")?;
+
+        let id = result.last_insert_rowid();
+        tracing::info!("Mina credential proof stored: {} (id: {})", credential_hash, id);
+        Ok(id)
+    }
+
+    pub async fn get_mina_credential_proof(
+        &self,
+        credential_hash: &str,
+    ) -> Result<Option<MinaCredentialProofRecord>> {
+        let record = sqlx::query_as::<_, MinaCredentialProofRecord>(
+            r#"
+            SELECT id, credential_hash, holder_public_key, credential_type, timestamp,
+                   proof_data, board_type, is_revoked, verified_at, created_at
+            FROM mina_credential_proofs
+            WHERE credential_hash = ?1
+            "#
+        )
+        .bind(credential_hash)
+        .fetch_optional(&self.pool)
+        .await
+        .context("Failed to fetch Mina credential proof")?;
+
+        Ok(record)
+    }
+
+    pub async fn store_frost_authorization(
+        &self,
+        authorization_id: &str,
+        credential_hash: &str,
+        board_type: u32,
+        frost_signature: &[u8],
+        expires_at: Option<i64>,
+    ) -> Result<i64> {
+        let now = chrono::Utc::now().timestamp();
+        let result = sqlx::query(
+            r#"
+            INSERT INTO frost_authorizations
+            (authorization_id, credential_hash, board_type, frost_signature, authorized_at, expires_at, created_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            "#
+        )
+        .bind(authorization_id)
+        .bind(credential_hash)
+        .bind(board_type as i64)
+        .bind(frost_signature)
+        .bind(now)
+        .bind(expires_at)
+        .bind(now)
+        .execute(&self.pool)
+        .await
+        .context("Failed to store FROST authorization")?;
+
+        let id = result.last_insert_rowid();
+        tracing::info!("FROST authorization stored: {} for credential {}", authorization_id, credential_hash);
+        Ok(id)
+    }
+
+    pub async fn get_frost_authorization(
+        &self,
+        credential_hash: &str,
+    ) -> Result<Option<FrostAuthorizationRecord>> {
+        let record = sqlx::query_as::<_, FrostAuthorizationRecord>(
+            r#"
+            SELECT id, authorization_id, credential_hash, board_type, frost_signature,
+                   authorized_at, expires_at, created_at
+            FROM frost_authorizations
+            WHERE credential_hash = ?1
+            ORDER BY authorized_at DESC
+            LIMIT 1
+            "#
+        )
+        .bind(credential_hash)
+        .fetch_optional(&self.pool)
+        .await
+        .context("Failed to fetch FROST authorization")?;
+
+        Ok(record)
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -875,6 +1009,38 @@ impl sqlx::FromRow<'_, sqlx::sqlite::SqliteRow> for EvidenceCommitment {
             status: row.try_get("status")?,
             created_at: row.try_get("created_at")?,
             updated_at: row.try_get("updated_at")?,
+        })
+    }
+}
+
+impl sqlx::FromRow<'_, sqlx::sqlite::SqliteRow> for MinaCredentialProofRecord {
+    fn from_row(row: &sqlx::sqlite::SqliteRow) -> sqlx::Result<Self> {
+        Ok(Self {
+            id: row.try_get("id")?,
+            credential_hash: row.try_get("credential_hash")?,
+            holder_public_key: row.try_get("holder_public_key")?,
+            credential_type: row.try_get("credential_type")?,
+            timestamp: row.try_get("timestamp")?,
+            proof_data: row.try_get("proof_data")?,
+            board_type: row.try_get("board_type")?,
+            is_revoked: row.try_get("is_revoked")?,
+            verified_at: row.try_get("verified_at")?,
+            created_at: row.try_get("created_at")?,
+        })
+    }
+}
+
+impl sqlx::FromRow<'_, sqlx::sqlite::SqliteRow> for FrostAuthorizationRecord {
+    fn from_row(row: &sqlx::sqlite::SqliteRow) -> sqlx::Result<Self> {
+        Ok(Self {
+            id: row.try_get("id")?,
+            authorization_id: row.try_get("authorization_id")?,
+            credential_hash: row.try_get("credential_hash")?,
+            board_type: row.try_get("board_type")?,
+            frost_signature: row.try_get("frost_signature")?,
+            authorized_at: row.try_get("authorized_at")?,
+            expires_at: row.try_get("expires_at")?,
+            created_at: row.try_get("created_at")?,
         })
     }
 }

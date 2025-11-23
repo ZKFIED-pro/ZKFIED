@@ -11,6 +11,7 @@ pub mod keygen;
 pub mod lightclient;
 pub mod metadata_stripper;
 pub mod metrics;
+pub mod mina_verifier;
 pub mod near_client;
 pub mod orchestrator;
 pub mod payment_disclosure;

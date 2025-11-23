@@ -1,0 +1,16 @@
+{
+  "name": "zkfied-credential-issuer",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "deploy": "node build/src/deploy.js"
+  },
+  "dependencies": {
+    "o1js": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.3.0"
+  }
+}

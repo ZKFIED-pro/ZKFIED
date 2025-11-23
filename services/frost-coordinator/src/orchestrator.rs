@@ -1,6 +1,7 @@
 use crate::db::Database;
 use crate::frost_coordinator::FrostCoordinator;
 use crate::ipfs_client::{IpfsClient, EvidenceMetadata, FileMetadata};
+use crate::mina_verifier::MinaProofVerifier;
 use crate::payment_disclosure;
 use crate::rpc_client::ZcashRpcClient;
 use crate::transaction::{TransactionBuilder, EvidenceMemo};
@@ -23,6 +24,7 @@ pub struct EvidenceOrchestrator {
     frost: Arc<RwLock<FrostCoordinator<DefaultCiphersuite>>>,
     tx_builder: Arc<TransactionBuilder>,
     near: Arc<NearTransactionManager>,
+    mina: Arc<MinaProofVerifier>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -70,6 +72,7 @@ impl EvidenceOrchestrator {
         ipfs: Arc<IpfsClient>,
         rpc: Arc<ZcashRpcClient>,
         near: Arc<NearTransactionManager>,
+        mina: Arc<MinaProofVerifier>,
         params_dir: PathBuf,
     ) -> Result<Self> {
         let frost = FrostCoordinator::<DefaultCiphersuite>::new_with_dealer(db.clone(), 5, 3)
@@ -85,6 +88,7 @@ impl EvidenceOrchestrator {
             frost: Arc::new(RwLock::new(frost)),
             tx_builder: Arc::new(tx_builder),
             near,
+            mina,
         })
     }
 
