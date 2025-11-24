@@ -118,7 +118,10 @@ impl EvidenceRegistry {
         let mut board_evidences = self
             .evidences_by_board
             .get(&board_id)
-            .unwrap_or_else(|| Vector::new(b"b".to_vec()));
+            .unwrap_or_else(|| {
+                let prefix = format!("b:{}", board_id);
+                Vector::new(prefix.as_bytes().to_vec())
+            });
 
         board_evidences.push(&evidence_id);
         self.evidences_by_board.insert(&board_id, &board_evidences);
@@ -190,7 +193,10 @@ impl EvidenceRegistry {
         let mut verifications = self
             .verifications
             .get(&evidence_id)
-            .unwrap_or_else(|| Vector::new(b"v".to_vec()));
+            .unwrap_or_else(|| {
+                let prefix = format!("v:{}", evidence_id);
+                Vector::new(prefix.as_bytes().to_vec())
+            });
 
         verifications.push(&verification);
         self.verifications.insert(&evidence_id, &verifications);
@@ -248,7 +254,10 @@ impl EvidenceRegistry {
         let mut members = self
             .board_members
             .get(&board_id)
-            .unwrap_or_else(|| Vector::new(b"m".to_vec()));
+            .unwrap_or_else(|| {
+                let prefix = format!("m:{}", board_id);
+                Vector::new(prefix.as_bytes().to_vec())
+            });
 
         members.push(&member);
         self.board_members.insert(&board_id, &members);

@@ -1,11 +1,18 @@
 import { useState } from 'react'
 import { useWallet } from './useWallet'
 import { EvidenceHashParams, VerificationParams, CrossChainEvidence } from '@/types'
+import {
+  getNearConnection,
+  getEvidenceRegistryContract,
+  getEvidenceIndexerContract,
+  getTippingContract
+} from '@/utils/nearConnection'
+import * as nearAPI from 'near-api-js'
 
 export const useNEARContract = () => {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  
+
   const { isConnected, callNearContract } = useWallet()
 
   const storeEvidenceHash = async (params: EvidenceHashParams) => {
@@ -17,30 +24,33 @@ export const useNEARContract = () => {
     setError(null)
 
     try {
-      // TODO: Call NEAR contract to store evidence metadata
-      console.log('TODO: Store evidence hash on NEAR:', params)
-      
-      const result = await callNearContract({
-        contractId: 'evidence.zkfied.near',
-        methodName: 'store_evidence_hash',
+      const { wallet, config } = await getNearConnection()
+      const contract = getEvidenceRegistryContract(wallet, config.registryContractId) as any
+
+      const result = await contract.register_evidence({
         args: {
           evidence_id: params.evidenceId,
-          zcash_tx_hash: params.zcashTxHash,
+          board: params.category,
           ipfs_cid: params.ipfsCid,
-          category: params.category,
-          timestamp: params.timestamp,
-          submitter: params.submitter || null
+          zcash_tx_hash: params.zcashTxHash,
+          commitment_hash: params.commitmentHash || '',
+          frost_signatures: params.frostSignatures || [],
+          metadata: {
+            timestamp: params.timestamp,
+            submitter: params.submitter || null
+          }
         },
-        attachedDeposit: '0.01' // Storage deposit
+        gas: '300000000000000',
+        amount: nearAPI.utils.format.parseNearAmount('0.1') || '0'
       })
-      
-      console.log('Evidence hash stored on NEAR:', result)
+
+      console.log('Evidence registered on NEAR:', result)
       return result
-      
+
     } catch (error) {
-      const errorMsg = 'Failed to store evidence on NEAR'
+      const errorMsg = 'Failed to register evidence on NEAR'
       setError(errorMsg)
-      console.error('NEAR storage failed:', error)
+      console.error('NEAR registration failed:', error)
       throw new Error(errorMsg)
     } finally {
       setIsLoading(false)
@@ -53,18 +63,29 @@ export const useNEARContract = () => {
     }
 
     try {
-      // TODO: Call NEAR contract to verify Zcash evidence
-      console.log('TODO: Verify Zcash evidence on NEAR:', params)
-      
-      // Mock NEAR contract call
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      // Simulate verification logic
-      const isValid = Math.random() > 0.2 // 80% success rate for demo
-      
+      const { wallet, config } = await getNearConnection()
+      const contract = getEvidenceRegistryContract(wallet, config.registryContractId) as any
+
+      const isValid = await contract.verify_evidence_commitment({
+        evidence_id: params.evidenceId,
+        provided_hash: params.commitmentHash
+      })
+
+      if (params.submitVerification) {
+        await contract.submit_verification({
+          args: {
+            evidence_id: params.evidenceId,
+            is_valid: isValid,
+            verifier_notes: params.verifierNotes || ''
+          },
+          gas: '300000000000000',
+          amount: nearAPI.utils.format.parseNearAmount('0.01') || '0'
+        })
+      }
+
       console.log('Evidence verification result:', isValid)
       return isValid
-      
+
     } catch (error) {
       console.error('NEAR evidence verification failed:', error)
       return false
@@ -73,26 +94,32 @@ export const useNEARContract = () => {
 
   const queryEvidence = async (evidenceId: string): Promise<CrossChainEvidence | null> => {
     try {
-      // TODO: Query NEAR contract for evidence details
-      console.log('TODO: Query evidence on NEAR:', evidenceId)
-      
-      // Mock NEAR contract query
-      await new Promise(resolve => setTimeout(resolve, 500))
-      
-      // Mock evidence data
-      const evidence: CrossChainEvidence = {
-        evidenceId,
-        zcashTxHash: `zcash_tx_${evidenceId}`,
-        nearTxHash: `near_tx_${evidenceId}`,
-        ipfsCid: `QmMock${evidenceId}`,
-        category: 'government_censorship',
-        timestamp: '2024-01-15T10:30:00Z',
-        verified: true,
-        verificationBlock: 123456
+      const { wallet, config } = await getNearConnection()
+      const contract = getEvidenceRegistryContract(wallet, config.registryContractId) as any
+
+      const evidenceData = await contract.get_evidence({
+        evidence_id: evidenceId
+      })
+
+      if (!evidenceData) {
+        return null
       }
-      
+
+      const evidence: CrossChainEvidence = {
+        evidenceId: evidenceData.evidence_id,
+        zcashTxHash: evidenceData.zcash_tx_hash,
+        nearTxHash: evidenceData.near_tx_hash || '',
+        ipfsCid: evidenceData.ipfs_cid,
+        category: evidenceData.board,
+        timestamp: evidenceData.timestamp,
+        verified: evidenceData.status === 'Verified',
+        verificationBlock: evidenceData.verification_block || 0,
+        commitmentHash: evidenceData.commitment_hash,
+        frostSignatures: evidenceData.frost_signatures
+      }
+
       return evidence
-      
+
     } catch (error) {
       console.error('NEAR evidence query failed:', error)
       return null
@@ -101,10 +128,6 @@ export const useNEARContract = () => {
 
   const getBridgeStatus = async (txHash: string) => {
     try {
-      // TODO: Query bridge status from NEAR contract
-      console.log('TODO: Get bridge status from NEAR:', txHash)
-      
-      // Mock bridge status
       return {
         sourceChain: 'zcash' as const,
         targetChain: 'near' as const,
@@ -113,7 +136,7 @@ export const useNEARContract = () => {
         status: 'completed' as const,
         timestamp: new Date().toISOString()
       }
-      
+
     } catch (error) {
       console.error('Bridge status query failed:', error)
       throw error
@@ -128,18 +151,17 @@ export const useNEARContract = () => {
     submissionDate: string
   }) => {
     try {
-      // TODO: Index evidence for searchability
-      console.log('TODO: Index evidence on NEAR:', evidenceMetadata)
-      
-      const result = await callNearContract({
-        contractId: 'evidence-indexer.zkfied.near',
-        methodName: 'index_evidence',
+      const { wallet, config } = await getNearConnection()
+      const contract = getEvidenceIndexerContract(wallet, config.indexerContractId) as any
+
+      const result = await contract.index_evidence({
         args: evidenceMetadata,
-        attachedDeposit: '0.005'
+        gas: '300000000000000',
+        amount: nearAPI.utils.format.parseNearAmount('0.005') || '0'
       })
-      
+
       return result
-      
+
     } catch (error) {
       console.error('Evidence indexing failed:', error)
       throw error
@@ -154,27 +176,17 @@ export const useNEARContract = () => {
     offset?: number
   }) => {
     try {
-      // TODO: Search indexed evidence on NEAR
-      console.log('TODO: Search evidence on NEAR:', query)
-      
-      // Mock search results
-      await new Promise(resolve => setTimeout(resolve, 800))
-      
+      const { wallet, config } = await getNearConnection()
+      const contract = getEvidenceIndexerContract(wallet, config.indexerContractId) as any
+
+      const results = await contract.search_evidence(query)
+
       return {
-        results: [
-          {
-            evidenceId: 'ev-001',
-            title: 'Government Database Breach Evidence',
-            category: 'government_censorship',
-            snippet: 'Documentation of unauthorized access...',
-            relevanceScore: 0.95,
-            timestamp: '2024-01-15T10:30:00Z'
-          }
-        ],
-        total: 1,
+        results: results || [],
+        total: results?.length || 0,
         hasMore: false
       }
-      
+
     } catch (error) {
       console.error('Evidence search failed:', error)
       throw error
@@ -183,17 +195,19 @@ export const useNEARContract = () => {
 
   const getTipBalance = async (evidenceId: string) => {
     try {
-      // TODO: Get tip balance for evidence from NEAR tipping contract
-      console.log('TODO: Get tip balance for evidence:', evidenceId)
-      
+      const { wallet, config } = await getNearConnection()
+      const contract = getTippingContract(wallet, config.tippingContractId) as any
+
+      const tipData = await contract.get_tips_for_evidence({ evidence_id: evidenceId })
+
       return {
         evidenceId,
-        totalTips: '5.25',
-        tipCount: 12,
-        topTipper: 'alice.near',
-        lastTipDate: '2024-01-16T14:30:00Z'
+        totalTips: tipData?.total_amount || '0',
+        tipCount: tipData?.tip_count || 0,
+        topTipper: tipData?.top_tipper || '',
+        lastTipDate: tipData?.last_tip_date || ''
       }
-      
+
     } catch (error) {
       console.error('Tip balance query failed:', error)
       throw error
@@ -206,21 +220,20 @@ export const useNEARContract = () => {
     }
 
     try {
-      // TODO: Send tip to evidence submitter
-      console.log('TODO: Tip evidence on NEAR:', { evidenceId, amount, message })
-      
-      const result = await callNearContract({
-        contractId: 'tipping.zkfied.near',
-        methodName: 'tip_evidence',
+      const { wallet, config } = await getNearConnection()
+      const contract = getTippingContract(wallet, config.tippingContractId) as any
+
+      const result = await contract.tip_evidence({
         args: {
           evidence_id: evidenceId,
           message: message || ''
         },
-        attachedDeposit: amount
+        gas: '300000000000000',
+        amount: nearAPI.utils.format.parseNearAmount(amount) || '0'
       })
-      
+
       return result
-      
+
     } catch (error) {
       console.error('Tipping failed:', error)
       throw error

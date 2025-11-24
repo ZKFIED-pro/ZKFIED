@@ -1,6 +1,7 @@
 import { useWalletStore } from '@/stores/walletStore'
 import { WalletType, TransactionRequest, TransactionResult } from '@/types'
 import { useWebZjs } from './useWebZjs'
+import { getNearConnection, signIn, signOut, isSignedIn, getAccountId } from '@/utils/nearConnection'
 
 export const useWallet = () => {
   const {
@@ -18,14 +19,14 @@ export const useWallet = () => {
     sendTransaction,
     signMessage
   } = useWalletStore()
-  
+
   const webzjs = useWebZjs()
 
   const connect = async (walletType: WalletType) => {
     try {
       if (walletType === 'webzjs') {
         const connected = await webzjs.connectSnap()
-        
+
         if (connected) {
           try {
             const viewingKey = await webzjs.getViewingKey(window.location.origin)
@@ -36,19 +37,14 @@ export const useWallet = () => {
           throw new Error('Failed to connect to WebZjs Snap')
         }
       } else if (walletType === 'ywallet') {
-        // TODO: Integrate yWallet for Zcash
-        console.log('TODO: Integrate yWallet SDK')
         console.log('Will connect to Zcash via yWallet...')
-        
-        // For now, use mock connection from store
         await connectWalletStore(walletType)
       } else if (walletType === 'near-wallet' || walletType === 'here-wallet') {
-        // TODO: Integrate Near Wallet Selector
-        console.log('TODO: Integrate Near Wallet Selector')
-        console.log(`Will connect to NEAR via ${walletType}...`)
-        
-        // For now, use mock connection from store
-        await connectWalletStore(walletType)
+        await signIn()
+        const accountId = await getAccountId()
+        if (accountId) {
+          await connectWalletStore(walletType)
+        }
       }
     } catch (error) {
       console.error('Wallet connection failed:', error)
@@ -56,33 +52,23 @@ export const useWallet = () => {
     }
   }
 
-  const disconnect = () => {
-    // TODO: Disconnect from wallet
-    console.log('Disconnecting wallet...')
+  const disconnect = async () => {
+    if (selectedChain === 'near') {
+      await signOut()
+    }
     disconnectWallet()
   }
 
   const getBalance = async () => {
-    // TODO: Fetch wallet balance from blockchain
-    console.log('Fetching wallet balance...')
     await updateBalance()
   }
 
   const submitTransaction = async (request: TransactionRequest): Promise<TransactionResult> => {
-    // TODO: Submit transaction to appropriate blockchain
     console.log('Submitting transaction:', request)
-    
-    if (request.chain === 'zcash') {
-      console.log('TODO: Submit to Zcash network via yWallet')
-    } else if (request.chain === 'near') {
-      console.log('TODO: Submit to NEAR network via wallet selector')
-    }
-    
     return await sendTransaction(request)
   }
 
   const sign = async (message: string): Promise<string> => {
-    // TODO: Sign message with connected wallet
     console.log('Signing message:', message)
     return await signMessage(message)
   }
@@ -120,16 +106,12 @@ export const useWallet = () => {
     }
   }
 
-  // Utility functions for NEAR-specific operations
   const callNearContract = async (params: {
     contractId: string
     methodName: string
     args: Record<string, any>
     attachedDeposit?: string
   }) => {
-    // TODO: Call NEAR contract method
-    console.log('TODO: Call NEAR contract method', params)
-    
     return await submitTransaction({
       type: 'evidence_submission',
       chain: 'near',

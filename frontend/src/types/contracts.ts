@@ -49,13 +49,21 @@ export interface EvidenceHashParams {
   category: string
   timestamp: string
   submitter?: string
+  commitmentHash?: string
+  frostSignatures?: Array<{
+    participant_id: string
+    signature: string
+  }>
 }
 
 export interface VerificationParams {
   evidenceId: string
-  zcashTxHash: string
-  expectedCategory: string
-  expectedTimestamp: string
+  zcashTxHash?: string
+  expectedCategory?: string
+  expectedTimestamp?: string
+  commitmentHash: string
+  submitVerification?: boolean
+  verifierNotes?: string
 }
 
 export interface CrossChainEvidence {
@@ -67,6 +75,11 @@ export interface CrossChainEvidence {
   timestamp: string
   verified: boolean
   verificationBlock: number
+  commitmentHash?: string
+  frostSignatures?: Array<{
+    participant_id: string
+    signature: string
+  }>
 }
 
 export interface BridgeStatus {
