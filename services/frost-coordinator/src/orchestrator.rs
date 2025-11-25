@@ -4,7 +4,8 @@ use crate::ipfs_client::{IpfsClient, EvidenceMetadata, FileMetadata};
 use crate::mina_verifier::MinaProofVerifier;
 use crate::payment_disclosure;
 use crate::rpc_client::ZcashRpcClient;
-use crate::transaction::{TransactionBuilder, EvidenceMemo};
+use crate::transaction::TransactionBuilder;
+use crate::memo::{EvidenceMemo, Board, EvidenceType};
 use crate::near_client::{NearTransactionManager, FrostSignature as NearFrostSignature};
 use crate::evidence_commitment::EvidenceCommitment;
 use anyhow::{Result, Context};
@@ -180,7 +181,7 @@ impl EvidenceOrchestrator {
         )?;
 
         tracing::info!("FROST threshold signing: Starting board authorization");
-        let signature = self.frost_sign_transaction(
+        let (signature, individual_shares) = self.frost_sign_transaction(
             &frost_session_id,
             &evidence_id,
             &message,
@@ -228,23 +229,16 @@ impl EvidenceOrchestrator {
 
         tracing::info!("Registering evidence on NEAR blockchain for public queryability");
 
-        let near_frost_sigs: Vec<NearFrostSignature> = vec![
-            NearFrostSignature {
-                participant_id: 1,
-                signature: signature.clone(),
-                public_key: vec![],
-            },
-            NearFrostSignature {
-                participant_id: 2,
-                signature: signature.clone(),
-                public_key: vec![],
-            },
-            NearFrostSignature {
-                participant_id: 3,
-                signature: signature.clone(),
-                public_key: vec![],
-            },
-        ];
+        let near_frost_sigs: Vec<NearFrostSignature> = individual_shares
+            .iter()
+            .map(|(participant_id, share_bytes)| {
+                NearFrostSignature {
+                    participant_id: *participant_id,
+                    signature: share_bytes.clone(),
+                    public_key: vec![],
+                }
+            })
+            .collect();
 
         let near_tx_hash = self.near.register_evidence(
             evidence_id.clone(),
@@ -328,7 +322,7 @@ impl EvidenceOrchestrator {
         session_id: &str,
         evidence_id: &str,
         message: &[u8],
-    ) -> Result<Vec<u8>> {
+    ) -> Result<(Vec<u8>, Vec<(u16, Vec<u8>)>)> {
         let frost = self.frost.read().await;
 
         let participant_ids: Vec<u16> = vec![1, 2, 3];
@@ -357,6 +351,13 @@ impl EvidenceOrchestrator {
             .await?;
 
         tracing::info!("FROST Round 2 completed");
+
+        let mut individual_shares = Vec::new();
+        for (participant_id, share) in session.signature_shares.iter() {
+            let share_bytes = crate::frost_impl::serialize_signature_share(share);
+            individual_shares.push((*participant_id, share_bytes.to_vec()));
+        }
+
         tracing::info!("Aggregating signature");
 
         let signature = frost.aggregate_signature(&session).await?;
@@ -366,7 +367,7 @@ impl EvidenceOrchestrator {
 
         tracing::info!("FROST signing completed with real threshold cryptography");
 
-        Ok(signature_bytes)
+        Ok((signature_bytes, individual_shares))
     }
 
     async fn build_and_sign_transaction(
@@ -380,13 +381,36 @@ impl EvidenceOrchestrator {
     ) -> Result<String> {
         let recipient_addr = self.derive_recipient_address(viewing_keys.first())?;
 
-        let evidence_id = format!("evidence_{}_{}", board_category, current_height);
+        let board = match board_category {
+            "Healthcare" => Board::Healthcare,
+            "Government" => Board::Government,
+            "Corporate" => Board::Corporate,
+            "Environmental" => Board::Environmental,
+            "HumanRights" => Board::HumanRights,
+            "Financial" => Board::Financial,
+            _ => Board::Government,
+        };
+
+        let commitment_bytes = hex::decode(commitment_hash)
+            .context("Failed to decode commitment hash")?;
+        let mut commitment_array = [0u8; 32];
+        let copy_len = commitment_bytes.len().min(32);
+        commitment_array[..copy_len].copy_from_slice(&commitment_bytes[..copy_len]);
+
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        let viewing_keys_strings: Vec<String> = viewing_keys.to_vec();
 
         let evidence_memo = EvidenceMemo::new(
-            evidence_id,
+            EvidenceType::Document,
+            board,
             metadata_cid.to_string(),
-            board_category.to_string(),
-            commitment_hash.to_string(),
+            commitment_array,
+            timestamp,
+            viewing_keys_strings,
         );
 
         let tx_bytes = self.tx_builder.build_evidence_transaction(
@@ -578,7 +602,12 @@ mod tests {
             crate::near_client::NearNetwork::Testnet,
             db.clone(),
         ));
-        let orchestrator = EvidenceOrchestrator::new(db, ipfs, rpc, near, params_dir).unwrap();
+        let mina = Arc::new(crate::mina_verifier::MinaProofVerifier::new(
+            "https://api.minascan.io/node/devnet/v1/graphql".to_string(),
+            "B62qjLQo287BXoYZBweHfRN5bikWUFdc81rqECVEiRCBEoYBEGCbNc3".to_string(),
+            db.clone(),
+        ));
+        let orchestrator = EvidenceOrchestrator::new(db, ipfs, rpc, near, mina, params_dir).unwrap();
 
         let id1 = orchestrator.generate_evidence_id(&request);
         let id2 = orchestrator.generate_evidence_id(&request);
@@ -616,7 +645,12 @@ mod tests {
             crate::near_client::NearNetwork::Testnet,
             db.clone(),
         ));
-        let orchestrator = EvidenceOrchestrator::new(db, ipfs, rpc, near, params_dir).unwrap();
+        let mina = Arc::new(crate::mina_verifier::MinaProofVerifier::new(
+            "https://api.minascan.io/node/devnet/v1/graphql".to_string(),
+            "B62qjLQo287BXoYZBweHfRN5bikWUFdc81rqECVEiRCBEoYBEGCbNc3".to_string(),
+            db.clone(),
+        ));
+        let orchestrator = EvidenceOrchestrator::new(db, ipfs, rpc, near, mina, params_dir).unwrap();
 
         let hash = orchestrator.compute_commitment_hash(&request);
 

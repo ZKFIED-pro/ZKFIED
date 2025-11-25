@@ -7,58 +7,7 @@ use zcash_keys::address::UnifiedAddress;
 use zcash_proofs::prover::LocalTxProver;
 use std::path::Path;
 use crate::rpc_client::ZcashRpcClient;
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct EvidenceMemo {
-    pub evidence_id: String,
-    pub ipfs_cid: String,
-    pub board_category: String,
-    pub commitment_hash: String,
-    pub timestamp: u64,
-}
-
-impl EvidenceMemo {
-    pub fn new(
-        evidence_id: String,
-        ipfs_cid: String,
-        board_category: String,
-        commitment_hash: String,
-    ) -> Self {
-        Self {
-            evidence_id,
-            ipfs_cid,
-            board_category,
-            commitment_hash,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
-        }
-    }
-
-    pub fn encode(&self) -> Result<Vec<u8>> {
-        const EVIDENCE_MEMO_PREFIX: u8 = 0xF0;
-        const MAX_MEMO_SIZE: usize = 511;
-
-        let json = serde_json::to_string(self)
-            .context("Failed to serialize evidence memo")?;
-
-        let mut bytes = Vec::with_capacity(MAX_MEMO_SIZE);
-        bytes.push(EVIDENCE_MEMO_PREFIX);
-        bytes.extend_from_slice(json.as_bytes());
-
-        if bytes.len() > MAX_MEMO_SIZE {
-            return Err(anyhow::anyhow!(
-                "Memo too large: {} bytes (max {})",
-                bytes.len(),
-                MAX_MEMO_SIZE
-            ));
-        }
-
-        bytes.resize(MAX_MEMO_SIZE, 0);
-        Ok(bytes)
-    }
-}
+use crate::memo::{EvidenceMemo, Board, EvidenceType};
 
 pub struct TransactionBuilder {
     network: Network,
@@ -144,9 +93,7 @@ impl TransactionBuilder {
             anchor_hex == "000000"
         );
 
-        let memo_bytes_vec = evidence_memo.encode()?;
-        let memo_array: [u8; 511] = memo_bytes_vec.try_into()
-            .map_err(|_| anyhow::anyhow!("Failed to convert memo to array"))?;
+        let memo_array = evidence_memo.encode()?;
         let memo_bytes = MemoBytes::from_bytes(&memo_array)?;
 
         let build_config = BuildConfig::TxV5 {

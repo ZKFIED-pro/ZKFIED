@@ -9,6 +9,7 @@ pub mod frost_coordinator;
 pub mod ipfs_client;
 pub mod keygen;
 pub mod lightclient;
+pub mod memo;
 pub mod metadata_stripper;
 pub mod metrics;
 pub mod mina_verifier;

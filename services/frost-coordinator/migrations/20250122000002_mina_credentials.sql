@@ -8,12 +8,13 @@ CREATE TABLE IF NOT EXISTS mina_credential_proofs (
     board_type INTEGER NOT NULL,
     is_revoked INTEGER NOT NULL DEFAULT 0,
     verified_at INTEGER NOT NULL,
-    created_at INTEGER NOT NULL,
-    INDEX idx_holder_public_key (holder_public_key),
-    INDEX idx_credential_type (credential_type),
-    INDEX idx_board_type (board_type),
-    INDEX idx_verified_at (verified_at)
+    created_at INTEGER NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_holder_public_key ON mina_credential_proofs(holder_public_key);
+CREATE INDEX IF NOT EXISTS idx_credential_type ON mina_credential_proofs(credential_type);
+CREATE INDEX IF NOT EXISTS idx_board_type ON mina_credential_proofs(board_type);
+CREATE INDEX IF NOT EXISTS idx_verified_at ON mina_credential_proofs(verified_at);
 
 CREATE TABLE IF NOT EXISTS frost_authorizations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -24,8 +25,9 @@ CREATE TABLE IF NOT EXISTS frost_authorizations (
     authorized_at INTEGER NOT NULL,
     expires_at INTEGER,
     created_at INTEGER NOT NULL,
-    FOREIGN KEY (credential_hash) REFERENCES mina_credential_proofs(credential_hash),
-    INDEX idx_credential_hash (credential_hash),
-    INDEX idx_board_type (board_type),
-    INDEX idx_authorized_at (authorized_at)
+    FOREIGN KEY (credential_hash) REFERENCES mina_credential_proofs(credential_hash)
 );
+
+CREATE INDEX IF NOT EXISTS idx_frost_credential_hash ON frost_authorizations(credential_hash);
+CREATE INDEX IF NOT EXISTS idx_frost_board_type ON frost_authorizations(board_type);
+CREATE INDEX IF NOT EXISTS idx_frost_authorized_at ON frost_authorizations(authorized_at);

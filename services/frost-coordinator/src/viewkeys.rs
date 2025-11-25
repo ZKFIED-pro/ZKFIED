@@ -1,5 +1,10 @@
 use blake2::{Blake2b512, Digest};
 use crate::types::ApiError;
+use zcash_keys::keys::UnifiedFullViewingKey;
+use zcash_primitives::zip32::AccountId;
+use zcash_client_backend::encoding::{encode_extended_full_viewing_key, decode_extended_full_viewing_key};
+use anyhow::{Context, Result};
+use base64::Engine;
 
 pub struct ViewingKey {
     pub key_type: ViewingKeyType,
@@ -7,7 +12,7 @@ pub struct ViewingKey {
     pub scope: ViewingScope,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ViewingKeyType {
     Incoming,
     Full,
@@ -100,9 +105,193 @@ impl ViewingKeyDistributor {
     }
 }
 
+pub struct ZcashViewingKeyManager {
+    ufvks: std::collections::HashMap<String, String>,
+}
+
+impl ZcashViewingKeyManager {
+    pub fn new() -> Self {
+        Self {
+            ufvks: std::collections::HashMap::new(),
+        }
+    }
+
+    pub fn register_ufvk(&mut self, evidence_id: String, ufvk: String) -> Result<()> {
+        self.ufvks.insert(evidence_id, ufvk);
+        Ok(())
+    }
+
+    pub fn get_ufvk(&self, evidence_id: &str) -> Option<&String> {
+        self.ufvks.get(evidence_id)
+    }
+
+    pub fn export_viewing_key(&self, evidence_id: &str, format: ViewingKeyFormat) -> Result<String> {
+        let ufvk = self.ufvks
+            .get(evidence_id)
+            .context("Evidence not found")?;
+
+        match format {
+            ViewingKeyFormat::Bech32 => Ok(ufvk.clone()),
+            ViewingKeyFormat::Hex => {
+                let bytes = ufvk.as_bytes();
+                Ok(hex::encode(bytes))
+            }
+            ViewingKeyFormat::Base64 => {
+                let bytes = ufvk.as_bytes();
+                Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
+            }
+        }
+    }
+
+    pub fn import_viewing_key(&mut self, evidence_id: String, key_data: &str, format: ViewingKeyFormat) -> Result<()> {
+        let ufvk_string = match format {
+            ViewingKeyFormat::Bech32 => key_data.to_string(),
+            ViewingKeyFormat::Hex => {
+                let bytes = hex::decode(key_data)
+                    .context("Invalid hex format")?;
+                String::from_utf8(bytes)
+                    .context("Invalid UTF-8")?
+            }
+            ViewingKeyFormat::Base64 => {
+                let bytes = base64::engine::general_purpose::STANDARD.decode(key_data)
+                    .context("Invalid base64 format")?;
+                String::from_utf8(bytes)
+                    .context("Invalid UTF-8")?
+            }
+        };
+
+        self.register_ufvk(evidence_id, ufvk_string)?;
+        Ok(())
+    }
+
+    pub fn grant_tiered_access(
+        &self,
+        evidence_id: &str,
+        recipient: &str,
+        access_level: ViewingKeyType,
+    ) -> Result<TieredAccessGrant> {
+        let ufvk = self.ufvks
+            .get(evidence_id)
+            .context("Evidence not found")?;
+
+        let expiration = chrono::Utc::now() + chrono::Duration::days(365);
+
+        Ok(TieredAccessGrant {
+            evidence_id: evidence_id.to_string(),
+            recipient: recipient.to_string(),
+            access_level,
+            ufvk: ufvk.clone(),
+            granted_at: chrono::Utc::now(),
+            expires_at: expiration,
+        })
+    }
+
+    pub fn revoke_access(&mut self, evidence_id: &str) -> Result<()> {
+        self.ufvks.remove(evidence_id);
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ViewingKeyFormat {
+    Bech32,
+    Hex,
+    Base64,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct TieredAccessGrant {
+    pub evidence_id: String,
+    pub recipient: String,
+    pub access_level: ViewingKeyType,
+    pub ufvk: String,
+    pub granted_at: chrono::DateTime<chrono::Utc>,
+    pub expires_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl TieredAccessGrant {
+    pub fn is_expired(&self) -> bool {
+        chrono::Utc::now() > self.expires_at
+    }
+
+    pub fn to_json(&self) -> Result<String> {
+        serde_json::to_string_pretty(self)
+            .context("Failed to serialize access grant")
+    }
+
+    pub fn from_json(json: &str) -> Result<Self> {
+        serde_json::from_str(json)
+            .context("Failed to deserialize access grant")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_zcash_viewing_key_manager() {
+        let mut manager = ZcashViewingKeyManager::new();
+        let evidence_id = "evidence_001".to_string();
+        let test_ufvk = "uview1test...".to_string();
+
+        manager.register_ufvk(evidence_id.clone(), test_ufvk.clone()).unwrap();
+
+        let retrieved = manager.get_ufvk(&evidence_id);
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap(), &test_ufvk);
+    }
+
+    #[test]
+    fn test_tiered_access_grant() {
+        let mut manager = ZcashViewingKeyManager::new();
+        let evidence_id = "evidence_002";
+        let ufvk = "uview1test...".to_string();
+
+        manager.register_ufvk(evidence_id.to_string(), ufvk).unwrap();
+
+        let grant = manager.grant_tiered_access(
+            evidence_id,
+            "recipient@example.com",
+            ViewingKeyType::Full
+        ).unwrap();
+
+        assert_eq!(grant.evidence_id, evidence_id);
+        assert_eq!(grant.recipient, "recipient@example.com");
+        assert_eq!(grant.access_level, ViewingKeyType::Full);
+        assert!(!grant.is_expired());
+    }
+
+    #[test]
+    fn test_viewing_key_export_formats() {
+        let mut manager = ZcashViewingKeyManager::new();
+        let evidence_id = "evidence_003".to_string();
+        let ufvk = "uview1test123".to_string();
+
+        manager.register_ufvk(evidence_id.clone(), ufvk.clone()).unwrap();
+
+        let bech32_export = manager.export_viewing_key(&evidence_id, ViewingKeyFormat::Bech32).unwrap();
+        assert_eq!(bech32_export, ufvk);
+
+        let hex_export = manager.export_viewing_key(&evidence_id, ViewingKeyFormat::Hex).unwrap();
+        assert!(!hex_export.is_empty());
+
+        let base64_export = manager.export_viewing_key(&evidence_id, ViewingKeyFormat::Base64).unwrap();
+        assert!(!base64_export.is_empty());
+    }
+
+    #[test]
+    fn test_viewing_key_revocation() {
+        let mut manager = ZcashViewingKeyManager::new();
+        let evidence_id = "evidence_004".to_string();
+        let ufvk = "uview1test...".to_string();
+
+        manager.register_ufvk(evidence_id.clone(), ufvk).unwrap();
+        assert!(manager.get_ufvk(&evidence_id).is_some());
+
+        manager.revoke_access(&evidence_id).unwrap();
+        assert!(manager.get_ufvk(&evidence_id).is_none());
+    }
 
     #[test]
     fn test_key_derivation() {
