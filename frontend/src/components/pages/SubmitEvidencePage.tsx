@@ -1,7 +1,6 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, type AttestationGrant } from '@/services/api'
-import { AttestationFlow } from '../attestation/AttestationFlow'
 import WebZjsWallet from '../shared/WebZjsWallet'
 import { useWallet } from '@/hooks/useWallet'
 
@@ -31,11 +30,6 @@ const SubmitEvidencePage: React.FC = () => {
       return
     }
 
-    if (!attestation) {
-      setError('Email attestation is required')
-      return
-    }
-
     if (!webzjs.isConnected) {
       setError('WebZjs wallet connection is required for secure evidence submission')
       return
@@ -48,7 +42,7 @@ const SubmitEvidencePage: React.FC = () => {
         description,
         board_category: boardCategory,
         files,
-        attestation,
+        attestation: attestation || undefined,
       })
 
       navigate(`/evidence/${response.evidence_id}`)
@@ -81,11 +75,6 @@ const SubmitEvidencePage: React.FC = () => {
       <div className="container" style={{ paddingTop: '40px', paddingBottom: '80px' }}>
         <div style={{ maxWidth: '800px', margin: '0 auto' }}>
           <WebZjsWallet />
-          
-          <AttestationFlow
-            onAttestationComplete={setAttestation}
-            boardCategory={boardCategory}
-          />
 
           <form onSubmit={handleSubmit}>
             {error && (
@@ -176,18 +165,30 @@ const SubmitEvidencePage: React.FC = () => {
 
             <button
               type="submit"
-              disabled={submitting || !attestation || !webzjs.isConnected}
+              disabled={submitting || !webzjs.isConnected || !title.trim() || !description.trim()}
               className="st-btn"
               style={{ width: '100%', fontSize: '12px', padding: '16px' }}
             >
               {submitting ? 'Submitting Evidence...' : 'Submit Evidence'}
             </button>
-            
-            {(!attestation || !webzjs.isConnected) && (
+
+            {!webzjs.isConnected && (
               <p className="text-gray" style={{ fontSize: '10px', textAlign: 'center', marginTop: '8px' }}>
-                {!webzjs.isConnected && 'Connect WebZjs wallet and '}
-                {!attestation && 'complete email attestation to enable submission'}
+                Connect WebZjs wallet to enable submission
               </p>
+            )}
+
+            {submitting && (
+              <div style={{ marginTop: '16px', padding: '16px', border: '1px solid rgba(0, 255, 136, 0.3)', background: 'rgba(0, 255, 136, 0.05)' }}>
+                <p className="text-white" style={{ fontSize: '11px', marginBottom: '12px' }}>Processing your submission...</p>
+                <div style={{ fontSize: '10px', color: 'rgb(180, 180, 180)', lineHeight: '18px' }}>
+                  <div style={{ marginBottom: '8px' }}>1. Uploading files to IPFS...</div>
+                  <div style={{ marginBottom: '8px' }}>2. Encrypting evidence metadata...</div>
+                  <div style={{ marginBottom: '8px' }}>3. Initiating FROST signature (3-of-5 threshold)...</div>
+                  <div style={{ marginBottom: '8px' }}>4. Building Zcash shielded transaction...</div>
+                  <div>5. Broadcasting to testnet...</div>
+                </div>
+              </div>
             )}
 
             <div style={{ marginTop: '24px', padding: '16px', border: '1px solid rgb(52, 52, 52)' }}>

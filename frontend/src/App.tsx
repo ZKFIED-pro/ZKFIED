@@ -12,6 +12,7 @@ import SubmitEvidencePage from '@/components/pages/SubmitEvidencePage'
 import BrowseEvidencePage from '@/components/pages/BrowseEvidencePage'
 import CrossChainPage from '@/components/pages/CrossChainPage'
 import ProfilePage from '@/components/pages/ProfilePage'
+import EvidenceDetailPage from '@/components/pages/EvidenceDetailPage'
 
 // Layout wrapper component
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -54,9 +55,10 @@ function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/submit" element={<SubmitEvidencePage />} />
           <Route path="/browse" element={<BrowseEvidencePage />} />
+          <Route path="/evidence/:evidenceId" element={<EvidenceDetailPage />} />
           <Route path="/crosschain" element={<CrossChainPage />} />
           <Route path="/profile" element={<ProfilePage />} />
-          
+
           {/* Catch-all route for 404 */}
           <Route path="*" element={
             <div className="container py-24 text-center">

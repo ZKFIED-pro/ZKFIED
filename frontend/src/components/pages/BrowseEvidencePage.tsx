@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { api } from '@/services/api'
 import type { EvidenceIndex, EvidenceMetadata } from '@/services/api'
 
 const BrowseEvidencePage: React.FC = () => {
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const [evidenceIndex, setEvidenceIndex] = useState<EvidenceIndex[]>([])
   const [filteredEvidence, setFilteredEvidence] = useState<EvidenceIndex[]>([])
@@ -211,7 +212,7 @@ const BrowseEvidencePage: React.FC = () => {
                     key={item.evidence_id}
                     className="st-card"
                     style={{ cursor: 'pointer' }}
-                    onClick={() => loadEvidenceMetadata(item.ipfs_cid)}
+                    onClick={() => navigate(`/evidence/${item.evidence_id}`)}
                   >
                     <div className="st-card-inner">
                       <div className="flex justify-between items-start mb-md" style={{ paddingBottom: '16px', borderBottom: '1px solid rgb(52, 52, 52)' }}>

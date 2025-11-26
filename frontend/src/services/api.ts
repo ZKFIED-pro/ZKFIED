@@ -218,6 +218,22 @@ class ZKFIEDApi {
       body: JSON.stringify(request),
     })
   }
+
+  async getWalletAddress(): Promise<WalletAddress> {
+    return this.request<WalletAddress>('/api/wallet/address')
+  }
+
+  async submitHybridEvidence(request: HybridEvidenceRequest): Promise<HybridEvidenceResponse> {
+    return this.request<HybridEvidenceResponse>('/api/evidence/submit', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    })
+  }
+
+  async getMetrics(): Promise<string> {
+    const response = await fetch(`${this.baseURL}/metrics`)
+    return response.text()
+  }
 }
 
 export const api = new ZKFIEDApi()

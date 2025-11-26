@@ -1,7 +1,7 @@
 import * as nearAPI from 'near-api-js';
-import { Contract } from 'near-api-js';
+import { Contract, WalletConnection } from 'near-api-js';
 
-const { connect, keyStores, WalletConnection } = nearAPI;
+const { connect, keyStores } = nearAPI;
 
 // Get config from environment variables
 const getConfig = () => {
@@ -63,6 +63,7 @@ export const getEvidenceRegistryContract = (wallet: WalletConnection, contractId
         'register_evidence',
         'submit_verification',
       ],
+      useLocalViewExecution: false,
     }
   );
 };
@@ -80,6 +81,7 @@ export const getEvidenceIndexerContract = (wallet: WalletConnection, contractId:
       changeMethods: [
         'index_evidence',
       ],
+      useLocalViewExecution: false,
     }
   );
 };
@@ -97,6 +99,7 @@ export const getTippingContract = (wallet: WalletConnection, contractId: string)
       changeMethods: [
         'tip_evidence',
       ],
+      useLocalViewExecution: false,
     }
   );
 };
@@ -115,6 +118,7 @@ export const getAIAgentsContract = (wallet: WalletConnection, contractId: string
         'register_agent',
         'update_agent_status',
       ],
+      useLocalViewExecution: false,
     }
   );
 };
@@ -152,6 +156,7 @@ export const signIn = async () => {
   wallet.requestSignIn({
     contractId: getConfig().registryContractId,
     methodNames: ['register_evidence', 'submit_verification'],
+    keyType: 'ed25519',
   });
 };
 

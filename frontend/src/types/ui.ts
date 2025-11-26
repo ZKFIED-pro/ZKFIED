@@ -1,6 +1,6 @@
 // UI and component-related types for ZKFIED
 
-export interface ButtonProps {
+export interface ButtonProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'type'> {
   variant?: 'primary' | 'secondary' | 'danger'
   size?: 'sm' | 'md' | 'lg'
   disabled?: boolean
