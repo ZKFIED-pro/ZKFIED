@@ -15,8 +15,9 @@ use zkfied_frost_coordinator::{
     ipfs_client::IpfsClient,
     lightclient::LightClient,
     metrics,
-    mina_verifier::MinaProofVerifier,
+    mina_verifier::{MinaProofVerifier, MinaCredentialProof},
     near_client::{NearTransactionManager, NearNetwork},
+    params_downloader::ParamsDownloader,
     rpc_client::ZcashRpcClient,
     orchestrator::{
         EvidenceOrchestrator,
@@ -115,6 +116,12 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("Using Zcash params directory: {}", params_dir.display());
 
+    // Ensure Sapling parameters are downloaded before starting
+    tracing::info!("Ensuring Zcash Sapling parameters are present...");
+    let downloader = ParamsDownloader::new(params_dir.clone());
+    downloader.ensure_params().await?;
+    tracing::info!("Sapling parameters verified and ready");
+
     let near_contract_id = std::env::var("NEAR_CONTRACT_ID")
         .unwrap_or_else(|_| "registry.mrhashfox.testnet".to_string())
         .parse()
@@ -133,6 +140,30 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("NEAR transaction manager initialized");
 
+    // Initialize NEAR account if credentials are provided
+    if let (Ok(account_id_str), Ok(private_key_str)) = (
+        std::env::var("NEAR_ACCOUNT_ID"),
+        std::env::var("NEAR_PRIVATE_KEY"),
+    ) {
+        use zkfied_frost_coordinator::near_client::NearAccount;
+        match (account_id_str.parse(), private_key_str.parse()) {
+            (Ok(account_id), Ok(secret_key)) => {
+                let near_account = NearAccount::from_secret_key(account_id, secret_key);
+                let public_key = near_account.public_key();
+                tracing::info!("NEAR account: {}, derived public key: {}", account_id_str, public_key);
+                if let Err(e) = near_manager.initialize_account(near_account).await {
+                    tracing::error!("Failed to initialize NEAR account: {}", e);
+                } else {
+                    tracing::info!("NEAR account initialized successfully");
+                }
+            }
+            (Err(e), _) => tracing::error!("Invalid NEAR account ID: {}", e),
+            (_, Err(e)) => tracing::error!("Invalid NEAR private key: {}", e),
+        }
+    } else {
+        tracing::warn!("NEAR_ACCOUNT_ID or NEAR_PRIVATE_KEY not set - NEAR functionality disabled");
+    }
+
     let mina_graphql_endpoint = std::env::var("MINA_GRAPHQL_ENDPOINT")
         .unwrap_or_else(|_| "https://api.minascan.io/node/devnet/v1/graphql".to_string());
 
@@ -147,11 +178,19 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("Mina proof verifier initialized: {}", mina_zkapp_address);
 
+    let lightclient_for_orchestrator = LightClient::new(lightwalletd_url.clone()).await.ok();
+    if lightclient_for_orchestrator.is_some() {
+        tracing::info!("LightClient connected for orchestrator");
+    } else {
+        tracing::warn!("LightClient connection failed for orchestrator, will rely on RPC only");
+    }
+
     tracing::info!("Initializing Evidence Orchestrator with REAL ZK proof generation");
     let orchestrator = Arc::new(EvidenceOrchestrator::new(
         db.clone(),
         ipfs.clone(),
         rpc.clone(),
+        lightclient_for_orchestrator,
         near_manager.clone(),
         mina_verifier.clone(),
         params_dir,
@@ -172,10 +211,17 @@ async fn main() -> anyhow::Result<()> {
         .route("/health", get(health))
         .route("/evidence/submit", post(submit_evidence))
         .route("/evidence/:id", get(get_evidence))
+        .route("/evidence/:id/link-tx", post(link_zcash_tx))
         .route("/evidence/board/:category", get(list_evidence_by_board))
         .route("/frost/session/:id", get(get_frost_session))
         .route("/stats", get(get_stats))
         .route("/metrics", get(metrics_handler))
+        .route("/ipfs/evidence/:cid", get(get_ipfs_evidence))
+        .route("/ipfs/file/:cid", get(get_ipfs_file))
+        .route("/zcash/transaction/:txid", get(get_zcash_transaction))
+        .route("/wallet/info/:address", get(get_wallet_info))
+        .route("/mina/verify-credential", post(verify_mina_credential))
+        .route("/mina/credential/:hash", get(get_mina_credential))
         .with_state(orchestrator);
 
     let hybrid_router = Router::new()
@@ -207,6 +253,14 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("   GET    /frost/session/:id        - Get FROST session info");
     tracing::info!("   GET    /stats                    - Get database statistics");
     tracing::info!("   GET    /health                   - Health check");
+    tracing::info!("");
+    tracing::info!("   === IPFS Data Retrieval ===");
+    tracing::info!("   GET    /ipfs/evidence/:cid       - Retrieve evidence metadata from IPFS");
+    tracing::info!("   GET    /ipfs/file/:cid           - Retrieve file data from IPFS");
+    tracing::info!("");
+    tracing::info!("   === Zcash Blockchain Queries ===");
+    tracing::info!("   GET    /zcash/transaction/:txid  - Get transaction details");
+    tracing::info!("   GET    /wallet/info/:address     - Get wallet information");
     tracing::info!("");
     tracing::info!("   === Hybrid Mode (Zashi Wallet + ZK Proofs) ===");
     tracing::info!("   POST   /api/evidence/submit      - Submit evidence, get ZK proof + instructions");
@@ -300,4 +354,130 @@ async fn get_stats(
 
 async fn metrics_handler() -> Response {
     metrics::gather_metrics().into_response()
+}
+
+async fn get_ipfs_evidence(
+    State(orchestrator): State<Arc<EvidenceOrchestrator>>,
+    Path(cid): Path<String>,
+) -> Response {
+    tracing::debug!("Fetching IPFS evidence: {}", cid);
+
+    match orchestrator.get_ipfs_evidence(&cid).await {
+        Ok(evidence) => Json(evidence).into_response(),
+        Err(e) => {
+            tracing::error!("Failed to fetch evidence from IPFS: {}", e);
+            ApiError::NotFound(format!("Evidence not found: {}", cid)).into_response()
+        }
+    }
+}
+
+async fn get_ipfs_file(
+    State(orchestrator): State<Arc<EvidenceOrchestrator>>,
+    Path(cid): Path<String>,
+) -> Response {
+    tracing::debug!("Fetching IPFS file: {}", cid);
+
+    match orchestrator.get_ipfs_file(&cid).await {
+        Ok(data) => {
+            use axum::http::header;
+            (
+                [(header::CONTENT_TYPE, "application/octet-stream")],
+                data
+            ).into_response()
+        }
+        Err(e) => {
+            tracing::error!("Failed to fetch file from IPFS: {}", e);
+            ApiError::NotFound(format!("File not found: {}", cid)).into_response()
+        }
+    }
+}
+
+async fn get_zcash_transaction(
+    State(orchestrator): State<Arc<EvidenceOrchestrator>>,
+    Path(txid): Path<String>,
+) -> Response {
+    tracing::debug!("Fetching Zcash transaction: {}", txid);
+
+    match orchestrator.get_transaction(&txid).await {
+        Ok(tx_info) => Json(tx_info).into_response(),
+        Err(e) => {
+            tracing::error!("Failed to fetch transaction: {}", e);
+            ApiError::NotFound(format!("Transaction not found: {}", txid)).into_response()
+        }
+    }
+}
+
+async fn get_wallet_info(
+    State(orchestrator): State<Arc<EvidenceOrchestrator>>,
+    Path(address): Path<String>,
+) -> Response {
+    tracing::debug!("Getting wallet info for: {}", address);
+
+    match orchestrator.get_wallet_info(&address).await {
+        Ok(info) => Json(info).into_response(),
+        Err(e) => {
+            tracing::error!("Failed to get wallet info: {}", e);
+            ApiError::Internal(format!("Failed to get wallet info: {}", e)).into_response()
+        }
+    }
+}
+
+#[debug_handler]
+async fn verify_mina_credential(
+    State(orchestrator): State<Arc<EvidenceOrchestrator>>,
+    Json(proof): Json<MinaCredentialProof>,
+) -> Response {
+    tracing::info!("Verifying Mina credential proof: holder={}", proof.holder_public_key);
+
+    match orchestrator.verify_mina_credential(proof).await {
+        Ok(verification) => {
+            tracing::info!("Mina credential verified: {}", verification.credential_hash);
+            Json(verification).into_response()
+        }
+        Err(e) => {
+            tracing::error!("Failed to verify Mina credential: {}", e);
+            ApiError::Internal(format!("Credential verification failed: {}", e)).into_response()
+        }
+    }
+}
+
+async fn get_mina_credential(
+    State(orchestrator): State<Arc<EvidenceOrchestrator>>,
+    Path(credential_hash): Path<String>,
+) -> Response {
+    tracing::debug!("Fetching Mina credential: {}", credential_hash);
+
+    match orchestrator.get_mina_credential(&credential_hash).await {
+        Ok(Some(verification)) => Json(verification).into_response(),
+        Ok(None) => ApiError::NotFound(format!("Credential not found: {}", credential_hash)).into_response(),
+        Err(e) => {
+            tracing::error!("Failed to fetch Mina credential: {}", e);
+            ApiError::Internal(format!("Failed to fetch credential: {}", e)).into_response()
+        }
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct LinkZcashTxRequest {
+    zcash_txid: String,
+}
+
+#[debug_handler]
+async fn link_zcash_tx(
+    State(orchestrator): State<Arc<EvidenceOrchestrator>>,
+    Path(evidence_id): Path<String>,
+    Json(request): Json<LinkZcashTxRequest>,
+) -> Response {
+    tracing::info!("Linking Zcash txid {} to evidence {}", request.zcash_txid, evidence_id);
+
+    match orchestrator.link_zcash_transaction_and_complete(&evidence_id, &request.zcash_txid).await {
+        Ok(response) => {
+            tracing::info!("Evidence flow completed: {}", evidence_id);
+            Json(response).into_response()
+        }
+        Err(e) => {
+            tracing::error!("Failed to link transaction: {}", e);
+            ApiError::Internal(format!("Failed to complete flow: {}", e)).into_response()
+        }
+    }
 }

@@ -12,21 +12,40 @@ export interface Evidence {
   chain: 'zcash' | 'near' | 'both'
   zsaTokenId?: string
   ipfsCid?: string
+  zcashTxId?: string
   memo?: EncryptedMemo
   viewingKeys?: string[]
   frostSignature?: FrostSignature
   disclosureProof?: PaymentDisclosure
+  files?: Array<{
+    name: string
+    cid: string
+    size: number
+    type: string
+  }>
+}
+
+export interface MinaCredentialProof {
+  proof: string
+  public_input: string[]
+  holder_public_key: string
+  credential_type: number
+  timestamp: number
+  zkapp_address: string
 }
 
 export interface EvidenceFormData {
-  title: string
-  description: string
-  category: EvidenceCategory
-  evidenceType: EvidenceType
-  privacyLevel: PrivacyLevel
-  chain: 'zcash' | 'near'
-  files: File[]
-  metadata: EvidenceMetadata
+  title?: string
+  description?: string
+  category?: EvidenceCategory
+  board_category?: 'healthcare' | 'government' | 'corporate' | 'civil_society' | 'media'
+  evidenceType?: EvidenceType
+  privacyLevel?: PrivacyLevel
+  chain?: 'zcash' | 'near'
+  files?: File[]
+  viewing_keys?: string[]
+  metadata?: EvidenceMetadata
+  mina_credential?: MinaCredentialProof
 }
 
 export interface EvidenceMetadata {

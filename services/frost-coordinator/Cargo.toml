@@ -36,6 +36,7 @@ secrecy = "0.8"
 # HTTP server
 axum = { version = "0.7", features = ["macros"] }
 tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
 tower = "0.4"
 tower-http = { version = "0.5", features = ["cors", "trace"] }
 
@@ -79,7 +80,7 @@ rand = "0.8"
 bip39 = { version = "2.0", features = ["rand"] }
 
 # RPC Client
-reqwest = { version = "0.12", features = ["json", "multipart"] }
+reqwest = { version = "0.12", features = ["json", "multipart", "stream"] }
 
 # NEAR Protocol Integration
 near-crypto = "0.31"

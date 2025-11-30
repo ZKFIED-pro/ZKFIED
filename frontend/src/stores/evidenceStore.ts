@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { Evidence, EvidenceFormData, FilterCriteria, EvidencePreview, EvidenceStats } from '@/types'
+import { api } from '@/services/api'
 
 interface EvidenceStore {
   // Evidence data
@@ -80,9 +81,8 @@ const mockEvidence: Evidence[] = [
 ]
 
 export const useEvidenceStore = create<EvidenceStore>((set, get) => ({
-  // Initial state
-  evidenceList: mockEvidence,
-  filteredEvidence: mockEvidence,
+  evidenceList: [],
+  filteredEvidence: [],
   currentEvidence: null,
   
   submitFormData: {},
@@ -186,32 +186,43 @@ export const useEvidenceStore = create<EvidenceStore>((set, get) => ({
   submitEvidence: async () => {
     const { submitFormData } = get()
     set({ isSubmitting: true, error: null })
-    
+
     try {
-      console.log('Submitting evidence:', submitFormData)
-      
-      // Mock submission process
-      await new Promise(resolve => setTimeout(resolve, 3000))
-      
-      // Create new evidence entry
+      if (!submitFormData.title || !submitFormData.files?.length || !submitFormData.board_category) {
+        throw new Error('Missing required fields')
+      }
+
+      const response = await api.submitEvidence({
+        title: submitFormData.title,
+        description: submitFormData.description || '',
+        board_category: submitFormData.board_category as any,
+        files: submitFormData.files,
+        viewing_keys: submitFormData.viewing_keys || [],
+        mina_credential: submitFormData.mina_credential
+      })
+
       const newEvidence: Evidence = {
-        id: `ev-${Date.now()}`,
-        title: submitFormData.title || 'Untitled Evidence',
+        id: response.evidence_id,
+        title: submitFormData.title,
         description: submitFormData.description || '',
         category: submitFormData.category || 'other',
         evidenceType: submitFormData.evidenceType || 'document',
         privacyLevel: submitFormData.privacyLevel || 'fully_private',
         submittedAt: new Date().toISOString(),
-        status: 'submitted',
+        status: response.status === 'confirmed' ? 'verified' : 'submitted',
         chain: submitFormData.chain || 'zcash',
-        zsaTokenId: `zsa1evidence${Date.now()}`
+        zsaTokenId: response.zcash_txid || undefined,
+        ipfsCid: response.ipfs_cid,
+        zcashTxId: response.zcash_txid || undefined
       }
-      
+
       get().addEvidence(newEvidence)
       get().clearForm()
-      
+
     } catch (error) {
-      set({ error: 'Failed to submit evidence' })
+      console.error('Evidence submission failed:', error)
+      set({ error: error instanceof Error ? error.message : 'Failed to submit evidence' })
+      throw error
     } finally {
       set({ isSubmitting: false })
     }
@@ -219,32 +230,89 @@ export const useEvidenceStore = create<EvidenceStore>((set, get) => ({
 
   fetchEvidence: async (filters?: FilterCriteria) => {
     set({ isLoading: true, error: null })
-    
+
     try {
-      console.log('Fetching evidence with filters:', filters)
-      
-      // Mock API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      // In real implementation, fetch from backend
-      // For now, just use mock data
-      set({ evidenceList: mockEvidence, filteredEvidence: mockEvidence })
-      
+      const indices = await api.getAllEvidenceIndex()
+
+      const evidenceList: (Evidence | null)[] = await Promise.all(
+        indices.map(async (index) => {
+          try {
+            const metadata = await api.getIpfsEvidence(index.ipfs_cid)
+
+            return {
+              id: index.evidence_id,
+              title: metadata.title,
+              description: metadata.description,
+              category: index.board_category as any,
+              evidenceType: 'document' as const,
+              privacyLevel: 'selective_disclosure' as const,
+              submittedAt: index.created_at,
+              status: index.status === 'confirmed' ? 'verified' : index.status === 'failed' ? 'submitted' : 'submitted',
+              chain: 'zcash' as const,
+              zsaTokenId: index.zcash_txid,
+              ipfsCid: index.ipfs_cid,
+              zcashTxId: index.zcash_txid
+            } as Evidence
+          } catch (err) {
+            console.error(`Failed to fetch metadata for ${index.evidence_id}:`, err)
+            return null
+          }
+        })
+      )
+
+      const validEvidence = evidenceList.filter(e => e !== null) as Evidence[]
+      set({ evidenceList: validEvidence, filteredEvidence: validEvidence })
+
+      if (filters) {
+        get().setFilter(filters)
+      }
+
     } catch (error) {
-      set({ error: 'Failed to fetch evidence' })
+      console.error('Failed to fetch evidence:', error)
+      set({ error: error instanceof Error ? error.message : 'Failed to fetch evidence' })
     } finally {
       set({ isLoading: false })
     }
   },
 
   fetchEvidenceById: async (id: string) => {
-    console.log('Fetching evidence by ID:', id)
-    
-    // Mock fetch
-    const evidence = mockEvidence.find(ev => ev.id === id)
-    set({ currentEvidence: evidence || null })
-    
-    return evidence || null
+    set({ isLoading: true, error: null })
+
+    try {
+      const index = await api.getEvidenceIndex(id)
+      const metadata = await api.getIpfsEvidence(index.ipfs_cid)
+
+      const evidence: Evidence = {
+        id: index.evidence_id,
+        title: metadata.title,
+        description: metadata.description,
+        category: index.board_category as any,
+        evidenceType: 'document',
+        privacyLevel: 'selective_disclosure',
+        submittedAt: index.created_at,
+        status: index.status === 'confirmed' ? 'verified' : 'submitted',
+        chain: 'zcash',
+        zsaTokenId: index.zcash_txid,
+        ipfsCid: index.ipfs_cid,
+        zcashTxId: index.zcash_txid,
+        files: metadata.files?.map(f => ({
+          name: f.filename,
+          cid: f.cid,
+          size: f.size,
+          type: f.type
+        }))
+      }
+
+      set({ currentEvidence: evidence })
+      return evidence
+
+    } catch (error) {
+      console.error('Failed to fetch evidence by ID:', error)
+      set({ error: error instanceof Error ? error.message : 'Evidence not found' })
+      return null
+    } finally {
+      set({ isLoading: false })
+    }
   },
 
   clearForm: () => {

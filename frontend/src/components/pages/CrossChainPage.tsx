@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react'
-import { 
-  ArrowRight, 
-  Shield, 
-  Zap, 
-  ExternalLink, 
-  Clock, 
-  CheckCircle, 
+import {
+  ArrowRight,
+  Shield,
+  Zap,
+  ExternalLink,
+  Clock,
+  CheckCircle,
   AlertCircle,
   Loader
 } from 'lucide-react'
@@ -14,6 +14,7 @@ import Card from '@/components/shared/Card'
 import { useCrossChain } from '@/hooks/useCrossChain'
 import { useWallet } from '@/hooks/useWallet'
 import { BridgeStatus } from '@/types'
+import { api, type EvidenceIndex } from '@/services/api'
 
 const CrossChainPage: React.FC = () => {
   const { 
@@ -31,11 +32,17 @@ const CrossChainPage: React.FC = () => {
   const [selectedEvidence, setSelectedEvidence] = useState<string>('')
   const [targetChain, setTargetChain] = useState<'zcash' | 'near'>('near')
   const [bridgeHistory, setBridgeHistory] = useState<BridgeStatus[]>([])
+  const [evidenceList, setEvidenceList] = useState<EvidenceIndex[]>([])
+  const [loadingEvidence, setLoadingEvidence] = useState(false)
   const [bridgeFee, setBridgeFee] = useState<{
     zcashFee: string
     nearFee: string
     totalUsd: string
   } | null>(null)
+
+  useEffect(() => {
+    loadEvidenceList()
+  }, [])
 
   useEffect(() => {
     if (isConnected) {
@@ -48,6 +55,18 @@ const CrossChainPage: React.FC = () => {
       loadBridgeFee()
     }
   }, [selectedEvidence, targetChain])
+
+  const loadEvidenceList = async () => {
+    try {
+      setLoadingEvidence(true)
+      const evidence = await api.getAllEvidenceIndex()
+      setEvidenceList(evidence)
+    } catch (error) {
+      console.error('Failed to load evidence list:', error)
+    } finally {
+      setLoadingEvidence(false)
+    }
+  }
 
   const loadBridgeHistory = async () => {
     try {
@@ -127,12 +146,6 @@ const CrossChainPage: React.FC = () => {
         return 'text-terminal-secondary'
     }
   }
-
-  const mockEvidenceOptions = [
-    { id: 'ev-001', title: 'Government Database Breach Evidence' },
-    { id: 'ev-002', title: 'Corporate Whistleblower Retaliation' },
-    { id: 'ev-003', title: 'Media Suppression Campaign Documents' }
-  ]
 
   return (
     <div className="py-8 md:py-12 animate-fade-in">
@@ -271,14 +284,22 @@ const CrossChainPage: React.FC = () => {
                     className="input w-full"
                     value={selectedEvidence}
                     onChange={(e) => setSelectedEvidence(e.target.value)}
+                    disabled={loadingEvidence}
                   >
-                    <option value="">Choose evidence to bridge</option>
-                    {mockEvidenceOptions.map((evidence) => (
-                      <option key={evidence.id} value={evidence.id}>
-                        {evidence.title}
+                    <option value="">
+                      {loadingEvidence ? 'Loading evidence...' : 'Choose evidence to bridge'}
+                    </option>
+                    {evidenceList.map((evidence) => (
+                      <option key={evidence.evidence_id} value={evidence.evidence_id}>
+                        {evidence.evidence_id} - {evidence.board_category} ({evidence.status})
                       </option>
                     ))}
                   </select>
+                  {evidenceList.length === 0 && !loadingEvidence && (
+                    <p className="text-terminal-secondary text-xs mt-2">
+                      No evidence available. Submit evidence first.
+                    </p>
+                  )}
                 </div>
 
                 {/* Target Chain */}

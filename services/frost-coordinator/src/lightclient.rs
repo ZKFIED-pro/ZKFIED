@@ -26,10 +26,15 @@ impl LightClient {
     }
 
     pub async fn get_latest_block(&mut self) -> Result<BlockHeight> {
-        let response = self.client
-            .get_latest_block(ChainSpec { /* empty */ })
-            .await
-            .context("Failed to get latest block")?;
+        use tokio::time::{timeout, Duration};
+
+        let response = timeout(
+            Duration::from_secs(10),
+            self.client.get_latest_block(ChainSpec { /* empty */ })
+        )
+        .await
+        .context("get_latest_block timed out after 10 seconds")?
+        .context("Failed to get latest block")?;
 
         let block_id = response.into_inner();
         Ok(BlockHeight::from_u32(block_id.height as u32))
@@ -73,6 +78,38 @@ impl LightClient {
         let tree_state = response.into_inner();
         Ok(tree_state.sapling_tree)
     }
+
+    pub async fn get_block_range(
+        &mut self,
+        start_height: BlockHeight,
+        end_height: BlockHeight,
+    ) -> Result<Vec<zcash_client_backend::proto::compact_formats::CompactBlock>> {
+        use tokio_stream::StreamExt;
+
+        let range = BlockRange {
+            start: Some(BlockId {
+                height: u64::from(start_height),
+                hash: vec![],
+            }),
+            end: Some(BlockId {
+                height: u64::from(end_height),
+                hash: vec![],
+            }),
+        };
+
+        let mut stream = self.client
+            .get_block_range(range)
+            .await
+            .context("Failed to get block range")?
+            .into_inner();
+
+        let mut blocks = Vec::new();
+        while let Some(block) = stream.next().await {
+            blocks.push(block.context("Stream error")?);
+        }
+
+        Ok(blocks)
+    }
 }
 
 #[cfg(test)]
@@ -95,6 +132,19 @@ mod tests {
 
         let height = client.get_latest_block().await.unwrap();
         // Testnet block height should be > 2,000,000 (mainnet had higher, testnet is lower)
+        assert!(u32::from(height) > 500_000);
+    }
+
+    #[tokio::test]
+    async fn test_zaino_endpoint() {
+        // Test the Zaino testnet endpoint from zec.rocks
+        let mut client = LightClient::new("https://zaino.testnet.unsafe.zec.rocks:443".to_string())
+            .await
+            .unwrap();
+
+        let height = client.get_latest_block().await.unwrap();
+        println!("✓ Zaino testnet height: {}", u32::from(height));
+        // Testnet block height should be reasonable
         assert!(u32::from(height) > 500_000);
     }
 }

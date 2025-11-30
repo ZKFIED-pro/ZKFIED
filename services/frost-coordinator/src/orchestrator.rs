@@ -1,7 +1,8 @@
 use crate::db::Database;
 use crate::frost_coordinator::FrostCoordinator;
 use crate::ipfs_client::{IpfsClient, EvidenceMetadata, FileMetadata};
-use crate::mina_verifier::MinaProofVerifier;
+use crate::lightclient::LightClient;
+use crate::mina_verifier::{MinaProofVerifier, MinaCredentialProof, BoardType as MinaBoardType};
 use crate::payment_disclosure;
 use crate::rpc_client::ZcashRpcClient;
 use crate::transaction::TransactionBuilder;
@@ -22,6 +23,7 @@ pub struct EvidenceOrchestrator {
     db: Arc<Database>,
     ipfs: Arc<IpfsClient>,
     rpc: Arc<ZcashRpcClient>,
+    lightclient: Arc<RwLock<Option<LightClient>>>,
     frost: Arc<RwLock<FrostCoordinator<DefaultCiphersuite>>>,
     tx_builder: Arc<TransactionBuilder>,
     near: Arc<NearTransactionManager>,
@@ -35,6 +37,7 @@ pub struct EvidenceSubmissionRequest {
     pub description: String,
     pub files: Vec<FileSubmission>,
     pub viewing_keys: Vec<String>,
+    pub mina_credential: Option<MinaCredentialProof>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -72,6 +75,7 @@ impl EvidenceOrchestrator {
         db: Arc<Database>,
         ipfs: Arc<IpfsClient>,
         rpc: Arc<ZcashRpcClient>,
+        lightclient: Option<LightClient>,
         near: Arc<NearTransactionManager>,
         mina: Arc<MinaProofVerifier>,
         params_dir: PathBuf,
@@ -86,6 +90,7 @@ impl EvidenceOrchestrator {
             db,
             ipfs,
             rpc,
+            lightclient: Arc::new(RwLock::new(lightclient)),
             frost: Arc::new(RwLock::new(frost)),
             tx_builder: Arc::new(tx_builder),
             near,
@@ -98,6 +103,31 @@ impl EvidenceOrchestrator {
         request: EvidenceSubmissionRequest,
     ) -> Result<EvidenceSubmissionResponse> {
         tracing::info!("Starting evidence submission: {}", request.title);
+
+        // Verify Mina credential if provided
+        let credential_verification = if let Some(ref credential_proof) = request.mina_credential {
+            tracing::info!("Verifying Mina credential proof for evidence submission");
+
+            let verification = self.mina.verify_credential_proof(credential_proof.clone())
+                .await
+                .context("Failed to verify Mina credential proof")?;
+
+            // Verify board category matches credential board type
+            let expected_board_type = self.board_category_to_mina_type(&request.board_category)?;
+            if verification.board_type != expected_board_type {
+                anyhow::bail!(
+                    "Board category mismatch: credential is for {:?} but evidence is for {}",
+                    verification.board_type,
+                    request.board_category
+                );
+            }
+
+            tracing::info!("Mina credential verified successfully: {}", verification.credential_hash);
+            Some(verification)
+        } else {
+            tracing::info!("No Mina credential provided, proceeding without credential verification");
+            None
+        };
 
         let evidence_id = self.generate_evidence_id(&request);
         let timestamp = std::time::SystemTime::now()
@@ -123,7 +153,7 @@ impl EvidenceOrchestrator {
 
             self.db.record_ipfs_pin(
                 &file_cid,
-                Some(&evidence_id),
+                None,
                 "file",
                 Some(file.data.len() as i64),
                 "local",
@@ -153,7 +183,7 @@ impl EvidenceOrchestrator {
 
         self.db.record_ipfs_pin(
             &metadata_cid,
-            Some(&evidence_id),
+            None,
             "metadata",
             None,
             "local",
@@ -187,26 +217,7 @@ impl EvidenceOrchestrator {
             &message,
         ).await?;
 
-        tracing::info!("Building Zcash shielded transaction");
-
-        let current_height = self.rpc.get_current_height().await
-            .context("Failed to get current blockchain height")?;
-
-        let tx_hex = self.build_and_sign_transaction(
-            current_height,
-            &metadata_cid,
-            &commitment_hash,
-            &request.board_category,
-            &request.viewing_keys,
-            &signature,
-        ).await?;
-
-        tracing::info!("Broadcasting transaction to Zcash network");
-        let zcash_txid = self.rpc.send_raw_transaction(&tx_hex, false)
-            .await
-            .context("Failed to broadcast transaction to Zcash network")?;
-
-        tracing::info!("Transaction broadcast successful: {}", zcash_txid);
+        tracing::info!("Evidence preparation complete, user will create Zcash transaction");
 
         let commitment_hash_bytes: [u8; 32] = hex::decode(&commitment_hash)
             .context("Invalid commitment hash")?
@@ -221,71 +232,29 @@ impl EvidenceOrchestrator {
             timestamp as i64,
         ).await?;
 
-        self.db.update_commitment_zcash_tx(
-            &evidence_id,
-            &zcash_txid,
-            current_height as i64,
-        ).await?;
+        if let Some(verification) = credential_verification {
+            tracing::info!("Storing FROST authorization for verified credential");
 
-        tracing::info!("Registering evidence on NEAR blockchain for public queryability");
+            let authorization_id = format!("auth_{}_{}", evidence_id, verification.credential_hash);
 
-        let near_frost_sigs: Vec<NearFrostSignature> = individual_shares
-            .iter()
-            .map(|(participant_id, share_bytes)| {
-                NearFrostSignature {
-                    participant_id: *participant_id,
-                    signature: share_bytes.clone(),
-                    public_key: vec![],
-                }
-            })
-            .collect();
+            self.db.store_frost_authorization(
+                &authorization_id,
+                &verification.credential_hash,
+                verification.board_type as u32,
+                &signature,
+                None,
+            ).await.context("Failed to store FROST authorization")?;
 
-        let near_tx_hash = self.near.register_evidence(
-            evidence_id.clone(),
-            metadata_cid.clone(),
-            request.board_category.clone(),
-            commitment_hash_bytes.to_vec(),
-            zcash_txid.clone(),
-            current_height as u64,
-            near_frost_sigs,
-        ).await.context("Failed to register evidence on NEAR")?;
-
-        tracing::info!("Evidence registered on NEAR: {}", near_tx_hash);
-
-        self.db.update_commitment_near_tx(
-            &evidence_id,
-            &near_tx_hash,
-            0,
-        ).await?;
-
-        tracing::info!("Generating payment disclosure proof for evidence transparency");
-        let mut txid_bytes = [0u8; 32];
-        hex::decode_to_slice(&zcash_txid, &mut txid_bytes)
-            .context("Failed to decode txid")?;
-
-        let disclosure = payment_disclosure::create_payment_disclosure_for_evidence(
-            txid_bytes,
-            &evidence_id,
-            &request.board_category,
-            &metadata_cid,
-        );
-
-        let payment_disclosure_hex = disclosure.to_hex()
-            .map_err(|e| anyhow::anyhow!("Failed to encode payment disclosure: {}", e))?;
-
-        self.db.update_evidence_txid(
-            &evidence_id,
-            &zcash_txid,
-            "registered",
-        ).await?;
+            tracing::info!("FROST authorization stored: {}", authorization_id);
+        }
 
         Ok(EvidenceSubmissionResponse {
             evidence_id,
             ipfs_cid: metadata_cid,
-            zcash_txid: Some(zcash_txid),
+            zcash_txid: None,
             frost_session_id,
-            status: "registered".to_string(),
-            payment_disclosure: Some(payment_disclosure_hex),
+            status: "awaiting_zcash_tx".to_string(),
+            payment_disclosure: None,
         })
     }
 
@@ -559,6 +528,168 @@ impl EvidenceOrchestrator {
             signature: session.signature,
         })
     }
+
+    pub async fn get_ipfs_evidence(&self, cid: &str) -> Result<EvidenceMetadata> {
+        tracing::debug!("Retrieving evidence metadata from IPFS: {}", cid);
+        self.ipfs.download_evidence(cid).await
+    }
+
+    pub async fn get_ipfs_file(&self, cid: &str) -> Result<Vec<u8>> {
+        tracing::debug!("Retrieving file from IPFS: {}", cid);
+        self.ipfs.download_file(cid).await
+    }
+
+    pub async fn get_transaction(&self, txid: &str) -> Result<TransactionInfo> {
+        tracing::debug!("Retrieving transaction: {}", txid);
+
+        let tx_data = self.rpc.get_raw_transaction(txid, true).await?;
+
+        let confirmations = tx_data.get("confirmations")
+            .and_then(|c| c.as_u64())
+            .unwrap_or(0) as u32;
+
+        let height = tx_data.get("height")
+            .and_then(|h| h.as_u64())
+            .map(|h| h as u32);
+
+        let hex = tx_data.get("hex")
+            .and_then(|h| h.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        Ok(TransactionInfo {
+            txid: txid.to_string(),
+            confirmations,
+            height,
+            hex,
+            raw_data: tx_data,
+        })
+    }
+
+
+    fn board_category_to_mina_type(&self, category: &str) -> Result<MinaBoardType> {
+        match category.to_lowercase().as_str() {
+            "healthcare" => Ok(MinaBoardType::Healthcare),
+            "government" | "media" => Ok(MinaBoardType::Government),
+            "corporate" | "civil_society" => Ok(MinaBoardType::Corporate),
+            _ => anyhow::bail!("Invalid board category: {}", category),
+        }
+    }
+
+    pub async fn get_wallet_info(&self, address: &str) -> Result<WalletInfo> {
+        tracing::debug!("Getting wallet info for address: {}", address);
+
+        let current_height = self.rpc.get_current_height().await?;
+
+        Ok(WalletInfo {
+            address: address.to_string(),
+            current_height,
+            network: "testnet".to_string(),
+        })
+    }
+
+    pub async fn verify_mina_credential(
+        &self,
+        proof: MinaCredentialProof,
+    ) -> Result<crate::mina_verifier::CredentialVerification> {
+        self.mina.verify_credential_proof(proof).await
+    }
+
+    pub async fn get_mina_credential(
+        &self,
+        credential_hash: &str,
+    ) -> Result<Option<crate::mina_verifier::CredentialVerification>> {
+        self.mina.get_credential_verification(credential_hash).await
+    }
+
+    pub async fn link_zcash_transaction_and_complete(
+        &self,
+        evidence_id: &str,
+        zcash_txid: &str,
+    ) -> Result<EvidenceSubmissionResponse> {
+        tracing::info!("Linking Zcash transaction {} to evidence {}", zcash_txid, evidence_id);
+
+        let evidence = self.db.get_evidence(evidence_id)
+            .await?
+            .context("Evidence not found")?;
+
+        self.db.update_evidence_txid(evidence_id, zcash_txid, "linked").await?;
+
+        let mut txid_bytes = [0u8; 32];
+        hex::decode_to_slice(zcash_txid, &mut txid_bytes)
+            .context("Invalid txid format")?;
+
+        let disclosure = payment_disclosure::create_payment_disclosure_for_evidence(
+            txid_bytes,
+            evidence_id,
+            &evidence.board_category,
+            &evidence.ipfs_cid,
+        );
+
+        let disclosure_hex = disclosure.to_hex()
+            .map_err(|e| anyhow::anyhow!("Failed to encode payment disclosure: {}", e))?;
+
+        self.db.store_payment_disclosure(evidence_id, &disclosure_hex).await?;
+
+        let frost_signatures = self.db.get_frost_signatures_for_evidence(evidence_id).await?;
+
+        let near_frost_sigs: Vec<NearFrostSignature> = frost_signatures
+            .iter()
+            .map(|(participant_id, share_bytes)| {
+                NearFrostSignature {
+                    participant_id: *participant_id,
+                    signature: share_bytes.clone(),
+                    public_key: vec![],
+                }
+            })
+            .collect();
+
+        let commitment_bytes = hex::decode(&evidence.commitment_hash)?;
+
+        let near_tx_hash = self.near.register_evidence(
+            evidence_id.to_string(),
+            evidence.ipfs_cid.clone(),
+            evidence.board_category.clone(),
+            commitment_bytes,
+            zcash_txid.to_string(),
+            0,
+            near_frost_sigs,
+        ).await?;
+
+        self.db.update_commitment_near_tx(evidence_id, &near_tx_hash, 0).await?;
+        self.db.update_evidence_status(evidence_id, "completed").await?;
+
+        Ok(EvidenceSubmissionResponse {
+            evidence_id: evidence_id.to_string(),
+            ipfs_cid: evidence.ipfs_cid,
+            zcash_txid: Some(zcash_txid.to_string()),
+            frost_session_id: format!("frost_{}", evidence_id),
+            status: "completed".to_string(),
+            payment_disclosure: Some(disclosure_hex),
+        })
+    }
+
+    async fn verify_zcash_transaction_exists(&self, txid: &str) -> Result<bool> {
+        let url = format!("https://testnet.cipherscan.app/api/tx/{}", txid);
+        let response = reqwest::get(&url).await?;
+        Ok(response.status().is_success())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransactionInfo {
+    pub txid: String,
+    pub confirmations: u32,
+    pub height: Option<u32>,
+    pub hex: String,
+    pub raw_data: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WalletInfo {
+    pub address: String,
+    pub current_height: u32,
+    pub network: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -584,6 +715,7 @@ mod tests {
             description: "Test description".to_string(),
             files: vec![],
             viewing_keys: vec![],
+            mina_credential: None,
         };
 
         let db = Arc::new(Database::new("sqlite::memory:").await.unwrap());
@@ -607,7 +739,7 @@ mod tests {
             "B62qjLQo287BXoYZBweHfRN5bikWUFdc81rqECVEiRCBEoYBEGCbNc3".to_string(),
             db.clone(),
         ));
-        let orchestrator = EvidenceOrchestrator::new(db, ipfs, rpc, near, mina, params_dir).unwrap();
+        let orchestrator = EvidenceOrchestrator::new(db, ipfs, rpc, None, near, mina, params_dir).unwrap();
 
         let id1 = orchestrator.generate_evidence_id(&request);
         let id2 = orchestrator.generate_evidence_id(&request);
@@ -630,6 +762,7 @@ mod tests {
                 }
             ],
             viewing_keys: vec![],
+            mina_credential: None,
         };
 
         let db = Arc::new(Database::new("sqlite::memory:").await.unwrap());
@@ -650,7 +783,7 @@ mod tests {
             "B62qjLQo287BXoYZBweHfRN5bikWUFdc81rqECVEiRCBEoYBEGCbNc3".to_string(),
             db.clone(),
         ));
-        let orchestrator = EvidenceOrchestrator::new(db, ipfs, rpc, near, mina, params_dir).unwrap();
+        let orchestrator = EvidenceOrchestrator::new(db, ipfs, rpc, None, near, mina, params_dir).unwrap();
 
         let hash = orchestrator.compute_commitment_hash(&request);
 

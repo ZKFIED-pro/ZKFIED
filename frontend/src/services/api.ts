@@ -62,6 +62,15 @@ export interface EmailVerificationRequest {
   verification_code: string
 }
 
+export interface MinaCredentialProof {
+  proof: string
+  public_input: string[]
+  holder_public_key: string
+  credential_type: number
+  timestamp: number
+  zkapp_address: string
+}
+
 export interface SubmitEvidenceRequest {
   title: string
   description: string
@@ -69,6 +78,7 @@ export interface SubmitEvidenceRequest {
   files: File[]
   attestation?: AttestationGrant
   viewing_keys?: string[]
+  mina_credential?: MinaCredentialProof
 }
 
 export interface SubmitEvidenceResponse {
@@ -155,6 +165,7 @@ class ZKFIEDApi {
       files: filesData,
       viewing_keys: request.viewing_keys || [],
       attestation: request.attestation || null,
+      mina_credential: request.mina_credential || null,
     }
 
     return this.request<SubmitEvidenceResponse>('/evidence/submit', {
@@ -233,6 +244,74 @@ class ZKFIEDApi {
   async getMetrics(): Promise<string> {
     const response = await fetch(`${this.baseURL}/metrics`)
     return response.text()
+  }
+
+  async getIpfsEvidence(cid: string): Promise<EvidenceMetadata> {
+    return this.request<EvidenceMetadata>(`/ipfs/evidence/${cid}`)
+  }
+
+  async getIpfsFile(cid: string): Promise<Blob> {
+    const url = `${this.baseURL}/ipfs/file/${cid}`
+    const response = await fetch(url)
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch IPFS file: ${response.statusText}`)
+    }
+
+    return response.blob()
+  }
+
+  async getZcashTransaction(txid: string): Promise<{
+    txid: string
+    confirmations: number
+    height: number | null
+    hex: string
+    raw_data: any
+  }> {
+    return this.request(`/zcash/transaction/${txid}`)
+  }
+
+  async getWalletInfo(address: string): Promise<{
+    address: string
+    current_height: number
+    network: string
+  }> {
+    return this.request(`/wallet/info/${address}`)
+  }
+
+  async verifyMinaCredential(proof: MinaCredentialProof): Promise<{
+    credential_hash: string
+    board_type: number
+    is_valid: boolean
+    verified_at: number
+  }> {
+    return this.request('/mina/verify-credential', {
+      method: 'POST',
+      body: JSON.stringify(proof),
+    })
+  }
+
+  async getMinaCredential(credentialHash: string): Promise<{
+    credential_hash: string
+    board_type: number
+    is_valid: boolean
+    verified_at: number
+  }> {
+    return this.request(`/mina/credential/${credentialHash}`)
+  }
+
+  async linkTransaction(evidenceId: string, zcashTxid: string): Promise<{
+    success: boolean
+    evidence_id: string
+    status: string
+    payment_disclosure?: string
+    near_tx_hash?: string
+    message: string
+  }> {
+    return this.request(`/evidence/${evidenceId}/link-tx`, {
+      method: 'POST',
+      body: JSON.stringify({ zcash_txid: zcashTxid }),
+    })
   }
 }
 

@@ -511,6 +511,9 @@ impl Database {
         size_bytes: Option<i64>,
         pin_service: &str,
     ) -> Result<i64> {
+        tracing::debug!("Recording IPFS pin: cid={}, evidence_id={:?}, content_type={}, size_bytes={:?}, pin_service={}",
+            cid, evidence_id, content_type, size_bytes, pin_service);
+
         let result = sqlx::query(
             r#"
             INSERT INTO ipfs_pins
@@ -525,6 +528,10 @@ impl Database {
         .bind(pin_service)
         .execute(&self.pool)
         .await
+        .map_err(|e| {
+            tracing::error!("SQL error in record_ipfs_pin: {:?}", e);
+            e
+        })
         .context("Failed to record IPFS pin")?;
 
         let id = result.last_insert_rowid();
@@ -894,6 +901,71 @@ impl Database {
         .context("Failed to fetch FROST authorization")?;
 
         Ok(record)
+    }
+
+    pub async fn store_payment_disclosure(&self, evidence_id: &str, disclosure_hex: &str) -> Result<()> {
+        sqlx::query(
+            "UPDATE evidence_submissions
+             SET payment_disclosure = ?, updated_at = CURRENT_TIMESTAMP
+             WHERE evidence_id = ?"
+        )
+        .bind(disclosure_hex)
+        .bind(evidence_id)
+        .execute(&self.pool)
+        .await
+        .context("Failed to store payment disclosure")?;
+
+        Ok(())
+    }
+
+    pub async fn update_evidence_status(&self, evidence_id: &str, status: &str) -> Result<()> {
+        sqlx::query(
+            "UPDATE evidence_submissions
+             SET status = ?, updated_at = CURRENT_TIMESTAMP
+             WHERE evidence_id = ?"
+        )
+        .bind(status)
+        .bind(evidence_id)
+        .execute(&self.pool)
+        .await
+        .context("Failed to update evidence status")?;
+
+        Ok(())
+    }
+
+    pub async fn get_frost_signatures_for_evidence(&self, evidence_id: &str) -> Result<Vec<(u16, Vec<u8>)>> {
+        let session_id = format!("frost_{}", evidence_id);
+
+        let participants = sqlx::query_as::<_, FrostParticipant>(
+            "SELECT * FROM frost_participants WHERE session_id = ? AND round2_signature_share IS NOT NULL"
+        )
+        .bind(&session_id)
+        .fetch_all(&self.pool)
+        .await
+        .context("Failed to fetch FROST participants")?;
+
+        let mut signatures = Vec::new();
+        for participant in participants {
+            if let Some(sig_hex) = participant.round2_signature_share {
+                let sig_bytes = hex::decode(&sig_hex)
+                    .context("Failed to decode signature share")?;
+                signatures.push((participant.participant_id as u16, sig_bytes));
+            }
+        }
+
+        Ok(signatures)
+    }
+
+    pub async fn get_payment_disclosure(&self, evidence_id: &str) -> Result<Option<String>> {
+        let result = sqlx::query(
+            "SELECT payment_disclosure FROM evidence_submissions WHERE evidence_id = ?"
+        )
+        .bind(evidence_id)
+        .fetch_optional(&self.pool)
+        .await
+        .context("Failed to fetch payment disclosure")?;
+
+        Ok(result.and_then(|row| row.try_get("payment_disclosure").ok()))
     }
 }
 

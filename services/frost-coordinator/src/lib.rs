@@ -15,6 +15,7 @@ pub mod metrics;
 pub mod mina_verifier;
 pub mod near_client;
 pub mod orchestrator;
+pub mod params_downloader;
 pub mod payment_disclosure;
 pub mod permissions;
 pub mod prover;

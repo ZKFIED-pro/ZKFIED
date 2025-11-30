@@ -2,22 +2,46 @@ use anyhow::{Result, Context};
 use zcash_client_backend::scanning;
 use zcash_primitives::consensus::{BlockHeight, Network};
 use zcash_keys::keys::UnifiedFullViewingKey;
+use zcash_primitives::sapling::{
+    note_encryption::try_sapling_compact_note_decryption,
+    PaymentAddress,
+};
+use zcash_primitives::memo::MemoBytes;
+use zcash_note_encryption::Domain;
 use crate::rpc_client::ZcashRpcClient;
+use crate::lightclient::LightClient;
 
 /// Lightweight blockchain scanner for detecting received notes
 pub struct BlockchainScanner {
     network: Network,
     rpc: ZcashRpcClient,
+    lightclient: Option<LightClient>,
 }
 
 impl BlockchainScanner {
     pub fn new(network: Network, rpc: ZcashRpcClient) -> Self {
-        Self { network, rpc }
+        Self {
+            network,
+            rpc,
+            lightclient: None,
+        }
     }
 
-    /// Scan the blockchain for received notes to a viewing key
+    pub async fn new_with_lightclient(
+        network: Network,
+        rpc: ZcashRpcClient,
+        lightwalletd_url: String
+    ) -> Result<Self> {
+        let lightclient = LightClient::new(lightwalletd_url).await?;
+        Ok(Self {
+            network,
+            rpc,
+            lightclient: Some(lightclient),
+        })
+    }
+
     pub async fn scan_for_notes(
-        &self,
+        &mut self,
         ufvk: &UnifiedFullViewingKey,
         from_height: BlockHeight,
         to_height: BlockHeight,
@@ -30,21 +54,70 @@ impl BlockchainScanner {
 
         let mut received_notes = Vec::new();
 
-        // Scan blocks in batches
-        for height in u32::from(from_height)..=u32::from(to_height) {
-            if height % 100 == 0 {
-                tracing::debug!("Scanning block {}...", height);
+        if let Some(ref mut lc) = self.lightclient {
+            let blocks = lc.get_block_range(from_height, to_height).await?;
+
+            let sapling_ivk = ufvk.sapling()
+                .map(|k| k.ivk())
+                .context("No Sapling IVK in viewing key")?;
+
+            for block in blocks {
+                if block.height % 100 == 0 {
+                    tracing::debug!("Scanning block {}...", block.height);
+                }
+
+                for ctx in &block.vtx {
+                    let txid = hex::encode(&ctx.hash);
+
+                    for (output_index, output) in ctx.outputs.iter().enumerate() {
+                        let epk_bytes: [u8; 32] = output.epk[..].try_into()
+                            .map_err(|_| anyhow::anyhow!("Invalid epk length"))?;
+
+                        let cmu_bytes: [u8; 32] = output.cmu[..].try_into()
+                            .map_err(|_| anyhow::anyhow!("Invalid cmu length"))?;
+
+                        let domain = zcash_primitives::sapling::note_encryption::SaplingDomain::new(block.height as u32);
+
+                        match try_sapling_compact_note_decryption(
+                            &domain,
+                            sapling_ivk,
+                            &zcash_primitives::sapling::note_encryption::CompactOutputDescription {
+                                ephemeral_key: zcash_note_encryption::EphemeralKeyBytes(epk_bytes),
+                                cmu: zcash_primitives::sapling::note::ExtractedNoteCommitment::from_bytes(&cmu_bytes)
+                                    .ok_or_else(|| anyhow::anyhow!("Invalid note commitment"))?,
+                                enc_ciphertext: output.ciphertext[..52].try_into()
+                                    .map_err(|_| anyhow::anyhow!("Invalid ciphertext length"))?,
+                            },
+                        ) {
+                            Some((note, _)) => {
+                                received_notes.push(ReceivedNote {
+                                    txid: txid.clone(),
+                                    output_index: output_index as u32,
+                                    note_value: note.value().inner(),
+                                    memo: vec![],
+                                });
+
+                                tracing::info!(
+                                    "Found note in tx {} output {} value {}",
+                                    txid,
+                                    output_index,
+                                    note.value().inner()
+                                );
+                            }
+                            None => {}
+                        }
+                    }
+                }
             }
+        } else {
+            for height in u32::from(from_height)..=u32::from(to_height) {
+                if height % 100 == 0 {
+                    tracing::debug!("Scanning block {}...", height);
+                }
 
-            // Get block data from RPC
-            let block_hash = self.get_block_hash(height).await?;
-            let block_data = self.get_block(block_hash).await?;
-
-            // TODO: Parse block and scan for notes
-            // This requires decoding the block format and testing each transaction
-            // against our viewing keys
-
-            // For now, we'll use a simplified approach
+                let block_hash = self.get_block_hash(height).await?;
+                let _block_data = self.get_block(block_hash).await?;
+            }
         }
 
         tracing::info!("Scan complete. Found {} notes", received_notes.len());
