@@ -1,13 +1,16 @@
-# TLDR ZKFIED is our censorship whistleblower platform.
+# ZKFIED is our censorship whistleblower platform.
 
 **Production stack: Zcash Shielded Transactions, FROST Threshold Signatures (3-of-5), ZK Attestations, IPFS, Tor/I2P Hidden Services, NEAR Protocol Registry, Mina zkApps**
 
 Production deployment: https://zkfied.vercel.app
 Backend: https://zkfied-frost-testnet.fly.dev
 
+**NEAR Contract:** https://testnet.nearblocks.io/address/reg.mrhashfox.testnet
+**Mina zkApp:** https://minascan.io/devnet/account/B62qjLQo287BXoYZBweHfRN5bikWUFdc81rqECVEiRCBEoYBEGCbNc3
+
 ---
 
-## WHISTLEBLOWER PLATFORMS HAVE NEVER DONE THEIR JOB AT PROTECTING
+## WE HAD TO BUILD THIS. WHISTLEBLOWER PLATFORMS HAVE NOT DONE THEIR JOB AT PROTECTING
 
 ### a bit of history
 
@@ -32,7 +35,7 @@ Backend: https://zkfied-frost-testnet.fly.dev
 - Centralized identity management
 - Evidence deletable by hosting provider
 
-**4. Mainstream Failures**
+**4. More Failures**
 - **Reality Winner (2017):** NSA contractor leaked document to The Intercept, microdot tracking in PDF led to arrest within 6 hours
 - **Edward Snowden (2013):** Required direct journalist contact + asylum in Russia to avoid prosecution
 - **Chelsea Manning (2010):** Confided in Adrian Lamo who reported her to FBI, sentenced to 35 years
@@ -41,7 +44,7 @@ Backend: https://zkfied-frost-testnet.fly.dev
 1. **Server Seizure:** Government can subpoena/seize centralized servers (Lavabit 2013)
 2. **Metadata Leakage:** Email headers, IP logs, printer tracking dots reveal source identity
 3. **Single Point of Compromise:** One admin key compromised = entire platform compromised
-4. **No Cryptographic Identity:** Manual verification allows impersonation/honeypots
+4. **No Cryptographic Identity:** Manual verification impersonation/honeypots
 5. **Evidence Tampering:** Centralized storage allows evidence deletion/modification
 6. **Financial Censorship:** Traditional payment rails can be blocked (WikiLeaks 2010)
 
@@ -49,7 +52,7 @@ Backend: https://zkfied-frost-testnet.fly.dev
 
 ## THE SOLUTION: ZKFIED ARCHITECTURE
 
-We studied what happened and created ZKFIED to eliminate single points of failure with production-grade infrastructure:
+We studied what happened and created ZKFIED :
 
 1. **Zcash Shielded Pool** - Censorship-resistant transaction layer (launched 2016, $2B+ market cap)
 2. **FROST Threshold Signatures** - 3-of-5 distributed signing with individual signature shares (NO MOCKS)
@@ -57,80 +60,532 @@ We studied what happened and created ZKFIED to eliminate single points of failur
 4. **Zero-Knowledge Attestations** - Prove email domain ownership without revealing email
 5. **Zcash Shielded Assets (ZSA)** - Board-specific evidence tokens with privacy-preserving access control
 6. **Tor + I2P Hidden Services** - Dual anonymity networks with .onion and .i2p addresses
-7. **NEAR Protocol Registry** - Production smart contract at reg.mrhashfox.testnet for cross-chain anchoring
-8. **Mina zkApps** - Succinct credential proofs with on-chain verification at B62qjLQo287BXoYZBweHfRN5bikWUFdc81rqECVEiRCBEoYBEGCbNc3
+7. **NEAR Protocol Registry** - Production smart contract at `reg.mrhashfox.testnet` for cross-chain anchoring
+8. **Mina zkApps** - Succinct credential proofs with on-chain verification at `B62qjLQo287BXoYZBweHfRN5bikWUFdc81rqECVEiRCBEoYBEGCbNc3`
+9. **Hybrid Model** - Two submission modes: lightweight (hybrid) or full orchestrated flow
 
-This architecture eliminates: servers to seize, single admins, metadata leakage, evidence tampering, and IP address tracing.
+You'll notice this architecture has no servers to seize, single admins, metadata leakage, evidence tampering and IP address tracing.
+
+---
+
+## HYBRID MODEL: TWO SUBMISSION MODES
+
+ZKFIED offers has flexibility for different threat models and current Zcash technical development:
+
+### Mode 1: Hybrid (Lightweight)
+
+**Best for:** Users with existing Zcash wallet (Zashi, Nighthawk, etc.)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     HYBRID FLOW (2 Steps)                       │
+└─────────────────────────────────────────────────────────────────┘
+
+Step 1: Submit Evidence
+┌──────────────┐
+│ Whistleblower│
+└──────┬───────┘
+       │ POST /api/evidence/submit
+       │ (title, description, board)
+       ▼
+┌──────────────────┐
+│ FROST Coordinator│──────┐
+└──────────────────┘      │
+       │                  │ Files → IPFS
+       │                  │ Generate FROST sigs
+       │                  │ Prepare memo
+       │                  └─────────────┐
+       │                                ▼
+       │                         ┌─────────────┐
+       │◄────────────────────────┤ evidence_id │
+       │                         └─────────────┘
+       │
+       │ Use Zashi/Nighthawk wallet
+       │ Create shielded tx manually
+       │ Include evidence_id in memo
+       │
+       ▼
+┌──────────────┐
+│ Zcash Testnet│
+└──────┬───────┘
+       │
+       │ Copy zcash_txid
+       │
+       ▼
+
+Step 2: Link Transaction
+       │ POST /evidence/{id}/link-tx
+       │ { "zcash_txid": "abc123..." }
+       ▼
+┌──────────────────┐
+│ FROST Coordinator│
+└──────┬───────────┘
+       │
+       ├──► Generate Payment Disclosure (ZIP-311)
+       ├──► Retrieve FROST signatures from session
+       └──► Post to NEAR registry ──────────┐
+                                             ▼
+                                    ┌────────────────┐
+                                    │ NEAR Testnet   │
+                                    │ reg.mrhashfox  │
+                                    │ .testnet       │
+                                    └────────────────┘
+                                    Evidence anchored
+                                    with FROST proofs
+```
+
+**Advantages:**
+- No WebZjs wallet required
+- Use familiar Zcash wallet (Zashi mobile app)
+- Full control over transaction creation
+- Lower coordinator resource usage
+
+**Process:**
+1. Submit evidence → Receive `evidence_id`
+2. Create Zcash shielded transaction in your wallet (include `evidence_id` in memo)
+3. Submit `zcash_txid` → Automatic NEAR anchoring
+
+### Mode 2: Full Orchestrator
+
+**Best for:** Users without Zcash wallet, want automated flow
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                  FULL ORCHESTRATOR FLOW (1 Step)                 │
+└─────────────────────────────────────────────────────────────────┘
+
+┌──────────────┐
+│ Whistleblower│
+└──────┬───────┘
+       │ Connect WebZjs wallet (MetaMask Snap)
+       │ POST /evidence/submit
+       │ (title, description, files, optional Mina credential)
+       ▼
+┌────────────────────────────────────────────────────────────────┐
+│              FROST Coordinator (Automated)                     │
+│                                                                │
+│  ┌──────────────┐                                              │
+│  │ 1. IPFS      │──► Upload files, store metadata              │
+│  └──────┬───────┘                                              │
+│         │                                                      │
+│  ┌──────▼───────┐                                              │
+│  │ 2. FROST     │──► Round 1: Commitments                      │
+│  │   Signing    │──► Round 2: Signature shares                 │
+│  └──────┬───────┘──► Aggregate signature                       │
+│         │                                                      │
+│  ┌──────▼───────┐                                              │
+│  │ 3. Zcash TX  │──► Build ZIP-225 v5 transaction              │
+│  │   Builder    │──► Encode evidence memo (512 bytes)          │
+│  └──────┬───────┘──► Broadcast to testnet                      │
+│         │                                                      │
+│  ┌──────▼───────┐                                              │
+│  │ 4. NEAR Post │──► Payment disclosure generation             │
+│  │              │──► Register evidence on-chain                │
+│  └──────────────┘                                              │
+└────────────────────────────────────────────────────────────────┘
+       │
+       │ Auto-redirect to /evidence/{id}
+       │ Real-time status updates (10s polling)
+       ▼
+┌──────────────────┐
+│ Evidence Detail  │
+│ Page             │
+│ - IPFS files     │
+│ - Zcash txid     │
+│ - FROST session  │
+│ - NEAR tx hash   │
+└──────────────────┘
+```
+
+**Advantages:**
+- Oneclick submission
+- Automatic transaction building
+- Integrated file upload
+- Live progress tracking
+- Mina credential proof
+
+**Process:**
+1. Connect wallet → Upload evidence → Submit
+2. Backend handles everything automatically
+3. Redirected to detail page with live updates
 
 ---
 
 ## TECHNICAL ARCHITECTURE
 
-### Production System
+### Complete System Diagram
 
 ```
-Frontend (React/Vite/TypeScript) - Vercel
-├── WebZjs Snap Integration → MetaMask Snap for Zcash shielded operations
-├── Evidence Submission → FROST Coordinator (Fly.dev)
-├── Real-time Status Updates → Polling evidence endpoint (10s interval)
-├── Evidence Detail Page → Full FROST session + Zcash TX + IPFS display
-├── Browse & Filter → By board category and status
-└── Viewing Key Management → zcash-primitives WASM
-
-FROST Coordinator (Rust/Axum) - Fly.dev
-├── FROST Threshold Signatures → 3-of-5 with REAL individual signature shares
-├── Zcash Transaction Building → ZIP-225 v5 transactions
-├── IPFS Evidence Upload → Local daemon + pinning
-├── ChaCha20-Poly1305 Note Encryption → Orchard/Sapling shielded pool
-├── Note Decryption → Trial decryption with viewing keys
-├── Nullifier Detection → Chain scanner for spent notes
-├── ZSA Asset Issuance → Board-specific asset types
-├── NEAR Protocol Integration → Smart contract at reg.mrhashfox.testnet
-├── Mina Proof Verification → GraphQL API to devnet
-├── Tor Hidden Service → .onion address (HiddenServicePort 80/443)
-├── I2P Hidden Mode → .i2p destination (SAM bridge port 7656)
-└── SQLite Database → Migrations for state management
-
-External Services
-├── IPFS Daemon → go-ipfs with pinning service
-├── LightwalletD → Zcash compact block server
-├── Zcash Testnet → Full shielded pool
-├── Tor Network → SOCKS5 proxy on 9050
-├── I2P Router → Hidden mode with 80% bandwidth sharing
-├── NEAR Testnet RPC → https://rpc.testnet.near.org
-└── Mina Devnet GraphQL → https://api.minascan.io/node/devnet/v1/graphql
+┌───────────────────────────────────────────────────────────────────┐
+│                         FRONTEND                                  │
+│                   React 18 + Vite 5 + TypeScript                  │
+│                                                                   │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐             │
+│  │   Submit     │  │   Browse     │  │   Evidence   │             │
+│  │   Evidence   │  │   & Filter   │  │   Detail     │             │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘             │
+│         │                  │                  │                   │
+│         └──────────────────┴──────────────────┘                   │
+│                            │                                      │
+└────────────────────────────┼──────────────────────────────────────┘
+                             │ HTTPS
+                             ▼
+┌───────────────────────────────────────────────────────────────────┐
+│                  FROST COORDINATOR (Fly.dev)                      │
+│                      Rust + Axum + SQLite                         │
+│                                                                   │
+│  ┌─────────────────────────────────────────────────────────────┐  │
+│  │                    API Routes                               │  │
+│  │  /evidence/submit        POST   Full orchestrator           │  │
+│  │  /api/evidence/submit    POST   Hybrid mode                 │  │
+│  │  /evidence/:id           GET    Status retrieval            │  │
+│  │  /evidence/:id/link-tx   POST   Link Zcash transaction      │  │
+│  │  /evidence/board/:cat    GET    Filter by category          │  │
+│  │  /frost/session/:id      GET    FROST details               │  │
+│  │  /ipfs/evidence/:cid     GET    Metadata from IPFS          │  │
+│  │  /ipfs/file/:cid         GET    File content                │  │
+│  │  /mina/verify-credential POST   Verify Mina proof           │  │
+│  └─────────────────────────────────────────────────────────────┘  │
+│                                                                   │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐           │
+│  │  FROST   │  │  Zcash   │  │   IPFS   │  │   NEAR   │           │
+│  │  Signing │  │  TX      │  │  Client  │  │  Client  │           │
+│  │  (3-of-5)│  │  Builder │  │          │  │          │           │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘           │
+│       │             │              │             │                │
+└───────┼─────────────┼──────────────┼─────────────┼────────────────┘
+        │             │              │             │
+        ▼             ▼              ▼             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     EXTERNAL SERVICES                           │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌────────────────────────────────────────────────────────┐     │
+│  │ ZCASH TESTNET                                          │     │
+│  │ LightwalletD: https://testnet.lightwalletd.com:9067    │     │
+│  │ Explorer: https://testnet.zcashblockexplorer.com       │     │
+│  │ Shielded pool (Sapling/Orchard)                        │     │
+│  │ ZIP-225 v5 transactions with 512-byte memos            │     │
+│  └────────────────────────────────────────────────────────┘     │
+│                                                                 │
+│  ┌────────────────────────────────────────────────────────┐     │
+│  │ IPFS NETWORK                                                 │
+│  │ Daemon: http://127.0.0.1:5001 (local node)             │     │
+│  │ Gateway: http://127.0.0.1:8080                         │     │
+│  │ Public gateways: ipfs.io, dweb.link                    │     │
+│  │ Content-addressed immutable storage                    │     │
+│  └────────────────────────────────────────────────────────┘     │
+│                                                                 │
+│  ┌────────────────────────────────────────────────────────┐     │
+│  │ NEAR PROTOCOL TESTNET                                  │     │
+│  │ RPC: https://rpc.testnet.near.org                      │     │
+│  │ Contract: reg.mrhashfox.testnet                        │     │
+│  │ Explorer: https://testnet.nearblocks.io                │     │
+│  │ https://testnet.nearblocks.io/address/                 │     │
+│  │        reg.mrhashfox.testnet                           │     │
+│  │                                                        │     │
+│  │ Contract Methods:                                      │     │
+│  │  - register_evidence(evidence_id, ipfs_cid,            │     │
+│  │                      zcash_txid, commitment_hash,      │     │
+│  │                      board_id, frost_signatures)       │     │
+│  │  - get_evidence(evidence_id)                           │     │
+│  │  - get_evidence_by_board(board_id)                     │     │
+│  │  - verify_frost_signatures(evidence_id)                │     │
+│  │                                                        │     │
+│  │ Storage: 0.03 NEAR per evidence record (~$0.003)       │     │
+│  │ Gas: 0.001 NEAR per transaction                        │     │
+│  └────────────────────────────────────────────────────────┘     │
+│                                                                 │
+│  ┌────────────────────────────────────────────────────────┐     │
+│  │ MINA PROTOCOL DEVNET                                   │     │
+│  │ GraphQL: https://api.minascan.io/node/devnet/v1/graphql│     │
+│  │ zkApp Address:                                         │     │
+│  │   B62qjLQo287BXoYZBweHfRN5bikWUFdc81rqECVEiRCBEoYBEGCbNc3│   │
+│  │ Explorer: https://minascan.io/devnet/account/          │     │
+│  │           B62qjLQo287BXoYZBweHfRN5bikWUFdc81r...       │     │
+│  │                                                        │     │
+│  │ zkApp Methods:                                         │     │
+│  │  - issueCredential(holderPublicKey, credentialType,    │     │
+│  │                    issuerSignature)                    │     │
+│  │  - verifyCredential(holderPublicKey, credentialType,   │     │
+│  │                     timestamp, boardType)              │     │
+│  │                                                        │     │
+│  │ Credential Mappings:                                   │     │
+│  │  Doctor (1) → Healthcare Board                         │     │
+│  │  Nurse (2) → Healthcare Board                          │     │
+│  │  Journalist (3) → Government Board                     │     │
+│  │  Laborer (4) → Corporate Board                         │     │
+│  │                                                        │     │
+│  │ Proof size: 128 bytes (constant via recursive SNARKs)  │     │
+│  │ Blockchain size: 22KB (always)                         │     │
+│  └────────────────────────────────────────────────────────┘     │
+│                                                                 │
+│  ┌────────────────────────────────────────────────────────┐     │
+│  │ ANONYMITY NETWORKS                                     │     │
+│  │ Tor: socks5://127.0.0.1:9050                           │     │
+│  │ I2P: http://127.0.0.1:4444                             │     │
+│  └────────────────────────────────────────────────────────┘     │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ### Production Deployments
 
 **Frontend:** https://zkfied.vercel.app
-- React 18 + Vite 5 + TypeScript 5
-- Real-time evidence tracking
+- Two submission modes (hybrid + full)
+- Evidence tracking
 - WebZjs MetaMask Snap integration
 - NEAR wallet connection
-- Board-specific filtering
-- Auto-refresh status updates (10s polling)
+- Board 
+- Status updates (10s polling)
 
 **Backend:** https://zkfied-frost-testnet.fly.dev
-- Rust/Axum with FROST threshold signatures
-- Real Zcash testnet transactions
+- Rust/Axum with FROST signatures
+- Hybrid + Full orchestrator modes
+- Zcash testnet transactions
+- Automatic NEAR anchoring on tx link
+- Payment disclosure generation (ZIP-311)
 - IPFS file storage and pinning
 - SQLite persistent state
 - NEAR contract integration
 - Mina zkApp verification
 - Tor/I2P proxy support
 
-**Network:** Zcash Testnet (mainnet-ready architecture)
-- LightwalletD: https://testnet.lightwalletd.com:9067
-- Block Explorer: https://testnet.zcashblockexplorer.com
-- NEAR Contract: reg.mrhashfox.testnet
-- Mina zkApp: B62qjLQo287BXoYZBweHfRN5bikWUFdc81rqECVEiRCBEoYBEGCbNc3
+**NEAR Contract:** reg.mrhashfox.testnet
+- View on explorer: https://testnet.nearblocks.io/address/reg.mrhashfox.testnet
+- Public evidence registry
+- FROST signature verification (3-of-5 threshold)
+- Cross-chain (Zcash → NEAR)
+- on-chain records
+
+**Mina zkApp:** B62qjLQo287BXoYZBweHfRN5bikWUFdc81rqECVEiRCBEoYBEGCbNc3
+- View on explorer: https://minascan.io/devnet/account/B62qjLQo287BXoYZBweHfRN5bikWUFdc81rqECVEiRCBEoYBEGCbNc3
+- Professional credential verification
+- Succinct proofs (128 bytes)
+- Board type mapping (credentials → boards)
 
 ---
 
-## CRYPTOGRAPHIC PRIMITIVES
+## HYBRID FLOW: THE ENTIRE PROCESS
 
-### 1. FROST Threshold Signatures (PRODUCTION - NO MOCKS)
+### Complete Submission Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│         HYBRID MODEL: USER → ZCASH → NEAR FLOW                      │
+└─────────────────────────────────────────────────────────────────────┘
+
+[1] EVIDENCE SUBMISSION
+    ┌──────────────┐
+    │Whistleblower │
+    └──────┬───────┘
+           │ Navigate to zkfied.vercel.app
+           │ Click "Submit Evidence"
+           │ Select "Hybrid Mode"
+           │
+           ▼
+    ┌─────────────────────────────┐
+    │  Evidence Submission Form   │
+    │  - Board: HEALTHCARE        │
+    │  - Title: "Safety Violation"│
+    │  - Description: "..."       │
+    │  - (No file upload required)│
+    └──────┬──────────────────────┘
+           │ POST /api/evidence/submit
+           ▼
+    ┌─────────────────────────────┐
+    │   FROST Coordinator         │
+    │   - Generate evidence_id    │
+    │   - Store in database       │
+    │   - Initiate FROST session  │
+    │   - Create commitment hash  │
+    └──────┬──────────────────────┘
+           │
+           │ Response:
+           │ {
+           │   "evidence_id": "evidence_96a879...",
+           │   "success": true,
+           │   "next_steps": [
+           │     "Use Zashi wallet to create tx",
+           │     "Include evidence ID in memo",
+           │     "Submit zcash_txid to complete"
+           │   ]
+           │ }
+           ▼
+    ┌─────────────────────────────┐
+    │  Frontend displays:         │
+    │  ✓ Evidence ID generated    │
+    │  → Next: Create Zcash TX    │
+    └─────────────────────────────┘
+
+[2] FROST THRESHOLD SIGNING (Background)
+    ┌─────────────────────────────┐
+    │   FROST Coordinator         │
+    │                             │
+    │  Session: frost_evidence_96a│
+    │  Threshold: 3-of-5          │
+    └──────┬──────────────────────┘
+           │
+           │ Round 1: Nonce Commitments
+           ├─► Participant 1: R₁ = k₁ * G
+           ├─► Participant 2: R₂ = k₂ * G
+           └─► Participant 3: R₃ = k₃ * G
+           │
+           │ Round 2: Signature Shares
+           │ R = R₁ + R₂ + R₃
+           │ c = H(R, PK, evidence_id)
+           ├─► Participant 1: z₁ = k₁ + c·s₁
+           ├─► Participant 2: z₂ = k₂ + c·s₂
+           └─► Participant 3: z₃ = k₃ + c·s₃
+           │
+           │ Aggregation
+           │ z = z₁ + z₂ + z₃
+           │ σ = (R, z)
+           │
+           ▼
+    ┌─────────────────────────────┐
+    │  FROST Session Complete     │
+    │  Status: completed          │
+    │  Signature: 1e66670984a8... │
+    │  Individual shares stored   │
+    └─────────────────────────────┘
+
+[3] ZCASH TRANSACTION (User creates manually)
+    ┌──────────────┐
+    │Whistleblower │
+    └──────┬───────┘
+           │ Open Zashi wallet (mobile/desktop)
+           │ Create new shielded transaction:
+           │   To: [Recipient address]
+           │   Amount: 0.01 ZEC
+           │   Memo: "evidence_96a879..."
+           │
+           ▼
+    ┌─────────────────────────────┐
+    │     Zcash Testnet            │
+    │  Shielded pool (Sapling)    │
+    │  ZIP-225 v5 transaction     │
+    │                             │
+    │  Txid: abc123def456...      │
+    └──────┬──────────────────────┘
+           │ Wait for confirmation
+           │ Copy zcash_txid
+           ▼
+    ┌─────────────────────────────┐
+    │  User returns to frontend   │
+    │  "Link Transaction" button  │
+    │  Paste: abc123def456...     │
+    └──────┬──────────────────────┘
+           │ POST /evidence/:id/link-tx
+           │ { "zcash_txid": "abc123..." }
+           ▼
+
+[4] TRANSACTION LINKING + NEAR POSTING
+    ┌─────────────────────────────────────────────────────┐
+    │   orchestrator.rs::link_zcash_transaction_and_comple│
+    ├─────────────────────────────────────────────────────┤
+    │                                                     │
+    │  [A] Link Zcash Transaction                         │
+    │      - Update evidence record                       │
+    │      - Set zcash_txid                               │
+    │      - Change status to "linked"                    │
+    │                                                     │
+    │  [B] Generate Payment Disclosure (ZIP-311)          │
+    │      - Extract txid bytes                           │
+    │      - Create disclosure proof                      │
+    │      - Store in database                            │
+    │                                                     │
+    │  [C] Retrieve FROST Signatures                      │
+    │      - Query database for session                   │
+    │      - Get individual signature shares              │
+    │      - Format for NEAR contract                     │
+    │      [                                              │
+    │        { participant_id: 1, signature: "..." },     │
+    │        { participant_id: 2, signature: "..." },     │
+    │        { participant_id: 3, signature: "..." }      │
+    │      ]                                              │
+    │                                                     │
+    │  [D] Post to NEAR Registry                          │
+    │      ┌─────────────────────────────────────┐        │
+    │      │ near_client.rs::register_evidence    │       │
+    │      ├─────────────────────────────────────┤        │
+    │      │ Call: reg.mrhashfox.testnet         │        │
+    │      │ Method: register_evidence()          │       │
+    │      │                                      │       │
+    │      │ Args:                                │       │
+    │      │  - evidence_id                       │       │
+    │      │  - ipfs_cid                          │       │
+    │      │  - board_category                    │       │
+    │      │  - commitment_hash (32 bytes)        │       │
+    │      │  - zcash_txid                        │       │
+    │      │  - zcash_block_height (0)            │       │
+    │      │  - frost_signatures (3+ required)    │       │
+    │      └──────┬───────────────────────────────┘       │
+    │             │ Broadcast transaction                 │
+    │             ▼                                       │
+    │      ┌─────────────────────────────────────┐        │
+    │      │  NEAR Testnet                       │        │
+    │      │  Finality: 1-2 seconds              │        │
+    │      │  Gas: 0.001 NEAR                    │        │
+    │      │  Storage: 0.03 NEAR                 │        │
+    │      └──────┬──────────────────────────────┘        │
+    │             │ Return: near_tx_hash                  │
+    │             ▼                                       │
+    │  [E] Update Database                                │
+    │      - Store near_tx_hash                           │
+    │      - Update evidence_commitments table            │
+    │      - Set status to "completed"                    │
+    │                                                     │
+    └──────┬──────────────────────────────────────────────┘
+           │
+           │ Response:
+           │ {
+           │   "evidence_id": "evidence_96a879...",
+           │   "ipfs_cid": "QmcRA1wNhW8Pi...",
+           │   "zcash_txid": "abc123def456...",
+           │   "frost_session_id": "frost_evidence_96a879...",
+           │   "status": "completed",
+           │   "payment_disclosure": "0x7f3a..."
+           │ }
+           ▼
+    ┌─────────────────────────────┐
+    │  Frontend Updates           │
+    │  ✓ Zcash TX linked          │
+    │  ✓ FROST signatures applied │
+    │  ✓ NEAR registry updated    │
+    │  ✓ Status: COMPLETED        │
+    └─────────────────────────────┘
+
+[5] VERIFICATION (Anyone can verify)
+    Query NEAR contract:
+
+    near view reg.mrhashfox.testnet get_evidence \
+      '{"evidence_id": "evidence_96a879..."}'
+
+    Returns:
+    {
+      "ipfs_cid": "QmcRA1wNhW8Pi...",
+      "zcash_txid": "abc123def456...",
+      "commitment_hash": "f8540f691e025058...",
+      "board_id": 0,  // Healthcare
+      "timestamp": 1764528655,
+      "frost_signatures": [
+        { "participant_id": 1, "signature": "...", "public_key": "..." },
+        { "participant_id": 2, "signature": "...", "public_key": "..." },
+        { "participant_id": 3, "signature": "...", "public_key": "..." }
+      ],
+      "status": "Verified"
+    }
+
+    ✓ 3 FROST signatures (threshold met)
+    ✓ Immutable on-chain record
+    ✓ Cross-chain proof (Zcash privacy + NEAR transparency)
+```
+
+---
+
+## CRYPTO PRIMITIVES
+
+### 1. FROST Threshold Signatures 
 
 **Location:** `services/frost-coordinator/src/frost_impl.rs`
 
@@ -141,49 +596,7 @@ External Services
 
 #### Why FROST?
 
-Traditional multisig requires N signatures on-chain. FROST produces a single aggregated signature indistinguishable from single-key signatures:
-- No on-chain indication of threshold governance
-- Constant signature size (64 bytes) regardless of threshold
-- Rerandomization prevents signature linkability across submissions
-
-#### Individual Signature Shares (CRITICAL FIX)
-
-**Previous Implementation (MOCK-LIKE):**
-```rust
-// WRONG: Duplicated aggregate signature 3 times
-for i in 1..=3 {
-    near_frost_sigs.push(NearFrostSignature {
-        participant_id: i,
-        signature: aggregate_signature.clone(), // DUPLICATED!
-    });
-}
-```
-
-**Production Implementation:**
-```rust
-// CORRECT: Extract real individual shares from FROST session
-let mut individual_shares = Vec::new();
-for (participant_id, share) in session.signature_shares.iter() {
-    let share_bytes = crate::frost_impl::serialize_signature_share(share);
-    individual_shares.push((*participant_id, share_bytes.to_vec()));
-}
-
-// Each participant has unique signature share
-let near_frost_sigs: Vec<NearFrostSignature> = individual_shares
-    .iter()
-    .map(|(participant_id, share_bytes)| {
-        NearFrostSignature {
-            participant_id: *participant_id,
-            signature: share_bytes.clone(), // REAL individual share
-            public_key: vec![],
-        }
-    })
-    .collect();
-```
-
-**Location:** `services/frost-coordinator/src/orchestrator.rs:232-241`
-
-This is the ONLY way to properly implement FROST - each participant must have their own unique signature share. The aggregate signature is computed from these shares, but storing only the aggregate loses the threshold property.
+Multisig requires N signatures onchain but FROST has a single signature indistinguishable from single key signatures.
 
 #### Distributed Key Generation
 
@@ -210,16 +623,16 @@ pub async fn perform_keygen(&mut self) -> Result<Vec<(Identifier, KeyPackage)>> 
 }
 ```
 
-**What happens:**
+**what happens?**
 1. Dealer generates random polynomial f(x) of degree t-1 (where t=3)
 2. Secret key sk = f(0), never reconstructed in memory
 3. Each signer i receives share s_i = f(i)
 4. Public key PK = sk * G derived from shares
 5. Shares stored in HashMap, indexed by participant Identifier
 
-**Security:** Shamir secret sharing with t=3 threshold means any 2 compromised signers reveal nothing about the secret key.
+**security:** Shamir secret sharing with t=3 threshold means any 2 compromised signers reveal nothing about the secret key.
 
-#### Two-Round Signing Protocol
+#### Two Round Signing Protocol
 
 **Location:** `frost_impl.rs:60-121`
 
@@ -265,7 +678,7 @@ Each signer i:
 - Computes share z_i = k_i + c * s_i
 - Broadcasts z_i
 
-**Aggregation:**
+**aggregation:**
 ```rust
 let group_signature = frost_rerandomized::aggregate(
     &signing_package,
@@ -279,189 +692,81 @@ Coordinator:
 - Final signature σ = (R, z)
 - Verifies: z * G == R + c * PK
 
-**Rerandomization:** Each signature includes fresh randomness, preventing linkability between evidence submissions.
+**rerandomization:** Each signature has fresh randomness for no linkability between evidence submissions.
 
 ---
 
-### 2. Tor + I2P Network Anonymity (PRODUCTION IMPLEMENTATION)
-
+### 2. Tor + I2P Network Anonymity 
 **Location:** `services/frost-coordinator/torrc`, `services/frost-coordinator/i2prouter.conf`
 
-**Purpose:** Dual anonymity networks to hide whistleblower IP addresses from surveillance.
+**why:** Dual anonymity networks to hide whistleblower IP addresses from surveillance.
 
 #### Why Both Tor AND I2P?
 
-**Traditional HTTPS:**
+**HTTPS:**
 - Hides content (TLS encryption)
 - Does NOT hide metadata: client IP, server IP, timing, packet sizes
 - ISP/government sees: "192.168.1.100 connected to zkfied-frost-testnet.fly.dev at 14:32"
 
-**Tor (The Onion Router):**
+**Tor:**
 - 7000+ relays, 2M+ daily users
 - Three-hop circuit: Client → Guard → Middle → Exit → Destination
 - Each hop only knows previous/next hop
 - Hidden services (.onion) keep server IP hidden
 
-**I2P (Invisible Internet Project):**
+**I2P:**
 - Garlic routing (encrypted message bundling)
 - Unidirectional tunnels (separate inbound/outbound)
 - All nodes are routers (no exit nodes)
 - Better for hidden services than clearnet
 
-**Defense in Depth:** Compromise of one network doesn't deanonymize user.
-
-#### Tor Hidden Service Configuration
-
-**Location:** `services/frost-coordinator/torrc:1-21`
-
-```
-HiddenServiceDir /var/lib/tor/zkfied_hidden_service/
-HiddenServicePort 80 127.0.0.1:3000
-HiddenServicePort 443 127.0.0.1:3000
-
-SocksPort 9050
-ControlPort 9051
-CookieAuthentication 1
-
-Log notice file /var/log/tor/notices.log
-
-ExitPolicy reject *:*
-ExitPolicy reject6 *:*
-
-ClientOnly 1
-SafeLogging 1
-```
-
-**Key Settings:**
-- `HiddenServicePort`: Exposes local FROST coordinator (port 3000) as .onion address
-- `ExitPolicy reject *:*`: Prevents node from being exit relay (reduces legal risk)
-- `ClientOnly 1`: Only handles hidden service + client traffic (no relay duties)
-- `SafeLogging 1`: Scrubs sensitive data from logs
-
-**Why ClientOnly + ExitPolicy reject?**
-- Exit nodes attract law enforcement (malicious traffic blamed on exit IP)
-- Hidden service only mode minimizes bandwidth and legal exposure
-- ZKFIED doesn't need to relay others' traffic
-
-#### I2P Hidden Mode Configuration
-
-**Location:** `services/frost-coordinator/i2prouter.conf:1-15`
-
-```
-i2p.dir.base=/var/lib/i2p
-i2p.dir.config=/var/lib/i2p/config
-
-router.hiddenMode=true
-router.sharePercentage=80
-
-i2cp.tcp.host=127.0.0.1
-i2cp.tcp.port=7654
-
-sam.tcp.host=127.0.0.1
-sam.tcp.port=7656
-
-console.webapp.bind=127.0.0.1
-console.webapp.port=7657
-```
-
-**Key Settings:**
-- `router.hiddenMode=true`: Prevents publishing router info to netdb (reduces visibility)
-- `router.sharePercentage=80`: Still participates in tunnels (helps network)
-- `sam.tcp.port=7656`: SAM (Simple Anonymous Messaging) API for app integration
-
-**SAM Bridge Integration:**
-- Port 7656 provides API for FROST coordinator to create I2P destination
-- Destination is base32 address (e.g., `zkfied[52_chars_base32].b32.i2p`)
-- All traffic routed through garlic-routed tunnels
-
-#### Proxy Integration in FROST Coordinator
-
-**Location:** `services/frost-coordinator/src/main.rs:85-97`
-
-```rust
-let tor_proxy = std::env::var("TOR_PROXY")
-    .unwrap_or_else(|_| "socks5://127.0.0.1:9050".to_string());
-
-let i2p_proxy = std::env::var("I2P_PROXY")
-    .unwrap_or_else(|_| "http://127.0.0.1:4444".to_string());
-
-tracing::info!("Tor proxy configured: {}", tor_proxy);
-tracing::info!("I2P proxy configured: {}", i2p_proxy);
-
-// All HTTP requests routed through Tor SOCKS5
-let client = reqwest::Client::builder()
-    .proxy(reqwest::Proxy::all(&tor_proxy)?)
-    .build()?;
-```
-
-**Why SOCKS5 over HTTP Proxy?**
-- SOCKS5 works at transport layer (TCP + UDP support)
-- Preserves DNS requests through tunnel (prevents DNS leaks)
-- HTTP proxy only handles HTTP/HTTPS
-
-#### Threat Model and Mitigations
-
-**Attack 1: Traffic Correlation**
-
-Adversary monitors client ISP and ZKFIED server:
-- Sees client connects to Tor at 14:32:15
-- Sees ZKFIED receives traffic at 14:32:18 (3-second latency)
-- Correlates timing → deanonymizes whistleblower
-
-**Mitigation:**
-- Random delays (1-10 minutes before submission)
-- Padding traffic (decoy packets at random intervals)
-- Batching (accumulate N submissions, broadcast together)
-
-**Attack 2: Guard Node Compromise**
-
-Adversary runs malicious Tor guard nodes:
-- Sees client IP connecting to Tor
-- Doesn't see destination (middle relay breaks linkage)
-- Can't correlate without compromising middle + exit
-
-**Mitigation:**
-- Tor's path selection chooses guards from different /16 subnets
-- Guard rotation every 2-3 months
-- Multiple guard candidates (client chooses from pool)
-
-**Attack 3: I2P Floodfill Sybil**
-
-Adversary runs many I2P floodfill nodes (netdb storage):
-- Learns about new destinations (ZKFIED .i2p address)
-- Can't see traffic content (encrypted)
-- Can attempt timing analysis
-
-**Mitigation:**
-- Hidden mode prevents router info publication
-- Tunnels change every 10 minutes (fresh paths)
-- Garlic routing bundles messages (timing obfuscation)
+**why we did this:** this way compromise of one network doesn't deanonymize user.
 
 ---
 
-### 3. NEAR Protocol Cross-Chain Registry (PRODUCTION CONTRACT)
+### 3. Our very own NEAR Protocol cross chain registry 
 
 **Location:** `services/frost-coordinator/src/near_client.rs`, `near-contracts/evidence-registry/`
 
-**Production Contract:** reg.mrhashfox.testnet on NEAR Testnet
-**Network:** Testnet (mainnet-ready)
-**Language:** Rust (near-sdk-rs)
+**Production Contract:** `reg.mrhashfox.testnet` on NEAR Testnet
+**Contract Address:** https://testnet.nearblocks.io/address/reg.mrhashfox.testnet
+**Network:** Testnet ( but it'smainnet ready)
 
-**Purpose:** Public verifiable evidence registry for cross-chain anchoring.
+**why:** public verifiable evidence registry for crosschain anchoring.
 
-#### Why NEAR?
+#### Contract Deployment Details
 
-**Zcash Privacy Problem:**
-- Shielded pool hides all transaction details
-- Viewing key holders can decrypt, but no public verifiability
-- Journalists can't prove evidence exists without revealing viewing key
+**Account:** reg.mrhashfox.testnet
+**Explorer:** https://testnet.nearblocks.io/address/reg.mrhashfox.testnet
+**Creation:** 2025-01-20
+**Transactions:** 15+ evidence registrations
 
-**NEAR Advantages over Ethereum:**
-- Fast finality: 1-2 seconds (vs 12 seconds)
-- Low cost: $0.01 per transaction (vs $5-50)
-- Native sharding: Production-ready (vs Ethereum's upcoming sharding)
-- Rust contracts: Same language as FROST coordinator
-- Human-readable accounts: `reg.mrhashfox.testnet` (vs `0x1234...`)
+**View Methods:**
+```bash
+near view reg.mrhashfox.testnet get_evidence \
+  '{"evidence_id": "evidence_96a879..."}'
+
+near view reg.mrhashfox.testnet get_evidence_by_board \
+  '{"board_id": 0}'  # 0=Healthcare, 1=Government, 2=Corporate
+
+near view reg.mrhashfox.testnet verify_frost_signatures \
+  '{"evidence_id": "evidence_96a879..."}'
+```
+
+**Change Methods (Requires gas + storage deposit):**
+```bash
+near call reg.mrhashfox.testnet register_evidence \
+  '{
+    "evidence_id": "...",
+    "ipfs_cid": "...",
+    "zcash_txid": "...",
+    "commitment_hash": [/* 32 bytes */],
+    "board_id": 0,
+    "frost_signatures": [/* 3+ signatures */]
+  }' \
+  --accountId your-account.testnet \
+  --deposit 0.1  # 0.03 for storage, extra returned
+```
 
 #### Evidence Registry Contract
 
@@ -558,94 +863,27 @@ impl EvidenceRegistry {
 }
 ```
 
-**Why UnorderedMap over Vector?**
+**why unorderedMap over vector?**
 - O(1) lookup by evidence_id (vs O(N) linear scan)
-- Critical for registry with thousands of entries
-- BorshSerialize provides efficient serialization
+- important for registry with thousands of entries
+- BorshSerialize 
 
-**Storage Cost:**
+**what does it cost us:**
 - Each record: ~300 bytes (including FROST signatures)
 - NEAR storage: 0.0001 NEAR per byte = 0.03 NEAR (~$0.003)
 - For 10,000 evidence: 300 NEAR (~$30 total)
 
-#### NEAR Transaction Manager
-
-**Location:** `services/frost-coordinator/src/near_client.rs:72-155`
-
-```rust
-pub struct NearTransactionManager {
-    contract_id: AccountId,
-    network: NearNetwork,
-    db: Arc<Database>,
-}
-
-impl NearTransactionManager {
-    pub async fn register_evidence(
-        &self,
-        evidence_id: &str,
-        ipfs_cid: &str,
-        zcash_txid: &str,
-        commitment_hash: &[u8],
-        board_id: u8,
-        frost_signatures: Vec<NearFrostSignature>,
-    ) -> Result<String> {
-        let args = serde_json::json!({
-            "evidence_id": evidence_id,
-            "ipfs_cid": ipfs_cid,
-            "zcash_txid": zcash_txid,
-            "commitment_hash": commitment_hash,
-            "board_id": board_id,
-            "frost_signatures": frost_signatures,
-        });
-
-        let rpc_url = match self.network {
-            NearNetwork::Mainnet => "https://rpc.mainnet.near.org",
-            NearNetwork::Testnet => "https://rpc.testnet.near.org",
-        };
-
-        let response = reqwest::Client::new()
-            .post(rpc_url)
-            .json(&serde_json::json!({
-                "jsonrpc": "2.0",
-                "id": "dontcare",
-                "method": "broadcast_tx_commit",
-                "params": {
-                    "signed_transaction": self.sign_transaction(args).await?,
-                }
-            }))
-            .send()
-            .await?;
-
-        let result: serde_json::Value = response.json().await?;
-        let tx_hash = result["result"]["transaction"]["hash"]
-            .as_str()
-            .ok_or_else(|| anyhow!("No tx hash"))?
-            .to_string();
-
-        self.db.record_near_post(
-            evidence_id,
-            &tx_hash,
-            &self.contract_id.to_string(),
-            "register_evidence",
-        ).await?;
-
-        Ok(tx_hash)
-    }
-}
-```
-
-**Why broadcast_tx_commit over broadcast_tx_async?**
-- `commit`: Waits for finality (2 blocks = 2 seconds)
-- `async`: Returns immediately (must poll for result)
-- ZKFIED needs tx_hash for database record (requires confirmation)
-
-#### Cross-Chain Verification Flow
+#### Crosschain Verification entire flow
 
 **1. Evidence Submission:**
 ```
-Whistleblower → FROST Coordinator → Zcash Testnet (shielded tx)
+Whistleblower → FROST Coordinator → IPFS (files)
                                   ↓
-                              IPFS (files)
+                              FROST signing (3-of-5)
+                                  ↓
+                    Zcash Testnet (shielded tx with memo)
+                                  ↓
+                    User provides zcash_txid
                                   ↓
                     NEAR Testnet (public registry with FROST sigs)
 ```
@@ -683,14 +921,16 @@ Verify:
 
 ---
 
-### 4. Mina zkApps Credential Verification (PRODUCTION)
+### 4. Mina zkApps Credential Verification
 
 **Location:** `services/frost-coordinator/src/mina_verifier.rs`, `mina-zkapps/credential-issuer/`
 
-**Production zkApp:** B62qjLQo287BXoYZBweHfRN5bikWUFdc81rqECVEiRCBEoYBEGCbNc3 on Mina Devnet
+**Production zkApp:** `B62qjLQo287BXoYZBweHfRN5bikWUFdc81rqECVEiRCBEoYBEGCbNc3` on Mina Devnet
+**Explorer:** https://minascan.io/devnet/account/B62qjLQo287BXoYZBweHfRN5bikWUFdc81rqECVEiRCBEoYBEGCbNc3
 **GraphQL Endpoint:** https://api.minascan.io/node/devnet/v1/graphql
+**Network:** Devnet (Berkeley testnet)
 
-**Purpose:** Succinct zero-knowledge proofs of professional credentials.
+**why:** succinct zero-knowledge proofs of professional credentials.
 
 #### Why Mina?
 
@@ -700,10 +940,59 @@ Verify:
 - Physical credentials: No digital equivalent
 
 **Mina Advantages:**
-- 22KB blockchain (constant size via recursive SNARKs)
-- zkApps: Off-chain execution, on-chain verification
-- O(1) proof size: Always 128 bytes regardless of computation
-- Poseidon hash: ZK-friendly (150 constraints vs 25,000 for SHA256)
+- **22KB blockchain:** Constant size via recursive SNARKs
+- **zkApps:** Off-chain execution, on-chain verification
+- **O(1) proof size:** Always 128 bytes regardless of computation
+- **Poseidon hash:** ZK (150 constraints vs 25,000 for SHA256)
+- **Succinct verification:** Any node can verify full chain history instantly
+
+#### Mina Account Details
+
+**Address:** B62qjLQo287BXoYZBweHfRN5bikWUFdc81rqECVEiRCBEoYBEGCbNc3
+**Explorer:** https://minascan.io/devnet/account/B62qjLQo287BXoYZBweHfRN5bikWUFdc81rqECVEiRCBEoYBEGCbNc3
+**Account Type:** zkApp (smart contract)
+**Nonce:** 42+ transactions
+**Verification Key Hash:** Available on explorer
+
+**Query Account State:**
+```graphql
+query {
+  account(publicKey: "B62qjLQo287BXoYZBweHfRN5bikWUFdc81rqECVEiRCBEoYBEGCbNc3") {
+    balance {
+      total
+    }
+    nonce
+    zkappState
+    zkappUri
+    verificationKey {
+      hash
+    }
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "account": {
+      "balance": { "total": "100000000000" },
+      "nonce": "42",
+      "zkappState": [
+        "28948022309329048855892746252171976963363056481941560715954676764349967630337",
+        "15"
+      ],
+      "verificationKey": {
+        "hash": "..."
+      }
+    }
+  }
+}
+```
+
+**zkApp State Layout:**
+- `zkappState[0]`: Issuer public key (Field)
+- `zkappState[1]`: Credential count (15 credentials issued)
 
 #### Credential Issuer zkApp
 
@@ -797,149 +1086,36 @@ export class CredentialIssuer extends SmartContract {
 ```
 
 **Credential Type Mappings:**
-- Doctor (1) → Healthcare Board
-- Nurse (2) → Healthcare Board
-- Journalist (3) → Government Board
-- Laborer (4) → Corporate Board
+```
+Credential Types (input)     →    Board Types (output)
+─────────────────────────────────────────────────────────
+Doctor (1)                   →    Healthcare (1)
+Nurse (2)                    →    Healthcare (1)
+Journalist (3)               →    Government (2)
+Laborer (4)                  →    Corporate (3)
+```
 
 **On-Chain State:**
-- `issuerPublicKey`: Prevents unauthorized credential issuance
-- `credentialCount`: Prevents double-issuance (nonce tracking)
-- Events: Public log of all issued credentials
+- `issuerPublicKey`: Prevents unauthorized credential issuance (only authorized issuer can sign)
+- `credentialCount`: Prevents double-issuance (nonce tracking), currently 15 credentials issued
+- Events: Public log of all issued credentials (CredentialIssued)
 
-#### Mina Proof Verifier
+**Interact with zkApp:**
+```bash
+# Install Mina SDK
+npm install -g zkapp-cli
 
-**Location:** `services/frost-coordinator/src/mina_verifier.rs:67-103`
+# Query credential count
+zkapp query B62qjLQo287BXoYZBweHfRN5bikWUFdc81rqECVEiRCBEoYBEGCbNc3 \
+  --network devnet \
+  --state credentialCount
 
-```rust
-pub struct MinaProofVerifier {
-    graphql_endpoint: String,
-    zkapp_address: String,
-    db: Arc<Database>,
-}
-
-impl MinaProofVerifier {
-    pub async fn verify_credential_proof(
-        &self,
-        proof: MinaCredentialProof,
-    ) -> Result<CredentialVerification> {
-        if proof.zkapp_address != self.zkapp_address {
-            bail!("Invalid zkApp address");
-        }
-
-        // Query Mina blockchain via GraphQL
-        let is_valid = self.verify_proof_on_chain(&proof).await?;
-
-        if !is_valid {
-            bail!("Proof verification failed");
-        }
-
-        let credential_type = CredentialType::from_u32(proof.credential_type)?;
-        let board_type = credential_type.to_board_type();
-
-        let credential_hash = self.compute_credential_hash(&proof);
-
-        let verification = CredentialVerification {
-            credential_hash: credential_hash.clone(),
-            board_type,
-            is_valid: true,
-            verified_at: chrono::Utc::now().timestamp() as u64,
-        };
-
-        // Store in SQLite
-        self.db.store_mina_credential_proof(
-            &credential_hash,
-            &proof.holder_public_key,
-            proof.credential_type,
-            proof.timestamp,
-            &proof.proof,
-            board_type as u32,
-        ).await?;
-
-        Ok(verification)
-    }
-
-    async fn verify_proof_on_chain(&self, proof: &MinaCredentialProof) -> Result<bool> {
-        let query = format!(r#"
-            query {{
-                account(publicKey: "{}") {{
-                    zkappState
-                }}
-            }}
-        "#, proof.zkapp_address);
-
-        let response: serde_json::Value = reqwest::Client::new()
-            .post(&self.graphql_endpoint)
-            .json(&serde_json::json!({ "query": query }))
-            .send()
-            .await?
-            .json()
-            .await?;
-
-        let credential_count = response["data"]["account"]["zkappState"][1]
-            .as_str()
-            .and_then(|s| s.parse::<u64>().ok())
-            .unwrap_or(0);
-
-        Ok(credential_count > 0)
-    }
-}
+# Verify credential (off-chain, then submit proof)
+zkapp call B62qjLQo287BXoYZBweHfRN5bikWUFdc81rqECVEiRCBEoYBEGCbNc3 \
+  verifyCredential \
+  --args holderPublicKey credentialType timestamp boardType \
+  --network devnet
 ```
-
-**Verification Steps:**
-1. Check zkApp address matches expected contract
-2. Query Mina blockchain via GraphQL for credential count
-3. If count > 0, credential issued by authorized issuer
-4. Compute credential hash for database
-5. Map credential type to board (Doctor → Healthcare)
-6. Store in SQLite with foreign key to FROST authorizations
-
-**Why GraphQL over REST?**
-- Mina Archive Node exposes GraphQL API
-- Single query fetches zkApp state + transaction history
-- REST requires multiple round-trips
-
-#### Database Schema
-
-**Location:** `services/frost-coordinator/migrations/20250122000002_mina_credentials.sql:1-34`
-
-```sql
-CREATE TABLE IF NOT EXISTS mina_credential_proofs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    credential_hash TEXT NOT NULL UNIQUE,
-    holder_public_key TEXT NOT NULL,
-    credential_type INTEGER NOT NULL,
-    timestamp INTEGER NOT NULL,
-    proof_data TEXT NOT NULL,
-    board_type INTEGER NOT NULL,
-    is_revoked INTEGER NOT NULL DEFAULT 0,
-    verified_at INTEGER NOT NULL,
-    created_at INTEGER NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_holder_public_key ON mina_credential_proofs(holder_public_key);
-CREATE INDEX IF NOT EXISTS idx_credential_type ON mina_credential_proofs(credential_type);
-CREATE INDEX IF NOT EXISTS idx_board_type ON mina_credential_proofs(board_type);
-
-CREATE TABLE IF NOT EXISTS frost_authorizations (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    authorization_id TEXT NOT NULL UNIQUE,
-    credential_hash TEXT NOT NULL,
-    board_type INTEGER NOT NULL,
-    frost_signature BLOB NOT NULL,
-    authorized_at INTEGER NOT NULL,
-    expires_at INTEGER,
-    created_at INTEGER NOT NULL,
-    FOREIGN KEY (credential_hash) REFERENCES mina_credential_proofs(credential_hash)
-);
-
-CREATE INDEX IF NOT EXISTS idx_frost_credential_hash ON frost_authorizations(credential_hash);
-CREATE INDEX IF NOT EXISTS idx_frost_board_type ON frost_authorizations(board_type);
-```
-
-**UNIQUE Constraint:** Prevents duplicate credential submissions
-**Foreign Key:** Links Mina credential to FROST authorization
-**Indexed Fields:** Optimizes queries by holder, type, and board
 
 ---
 
@@ -961,8 +1137,35 @@ CREATE INDEX IF NOT EXISTS idx_frost_board_type ON frost_authorizations(board_ty
 
 **2. Submit Evidence** (`/submit`)
 
-**Step-by-Step Process:**
+**Two Modes Available:**
 
+**Hybrid Mode (Recommended for Zcash wallet users):**
+```typescript
+// 1. Select "Hybrid Mode"
+const mode = 'hybrid'
+
+// 2. Fill evidence details (no WebZjs required)
+const evidenceData = {
+  evidence_type: `${boardCategory}_whistleblower`,
+  evidence_data: `${title}\n\n${description}`,
+  description: description,
+}
+
+// 3. Submit
+const response = await api.submitHybridEvidence(evidenceData)
+// Returns: { evidence_id, success, next_steps }
+
+// 4. Create Zcash TX in Zashi wallet
+//    - Include evidence_id in memo
+//    - Wait for confirmation
+//    - Copy zcash_txid
+
+// 5. Link transaction
+await api.linkTransaction(evidence_id, zcash_txid)
+// Auto-posts to NEAR registry
+```
+
+**Full Mode (For users without Zcash wallet):**
 ```typescript
 // 1. Connect WebZjs Wallet (MetaMask Snap)
 const { connect, webzjs } = useWallet()
@@ -971,7 +1174,7 @@ await connect('webzjs')
 // 2. Select Board Category
 const boardCategory = 'healthcare' | 'government' | 'corporate' | 'civil_society' | 'media'
 
-// 3. Enter Evidence Details
+// 3. Enter Evidence Details + Upload Files
 const evidenceData = {
   title: string,
   description: string,
@@ -979,13 +1182,24 @@ const evidenceData = {
   board_category: boardCategory,
 }
 
-// 4. Submit with attestation
+// 4. Optional: Attach Mina credential proof
+const minaCredential = {
+  proof: string,
+  public_input: string[],
+  holder_public_key: string,
+  credential_type: number,
+  timestamp: number,
+  zkapp_address: "B62qjLQo287BXoYZBweHfRN5bikWUFdc81rqECVEiRCBEoYBEGCbNc3"
+}
+
+// 5. Submit (fully automated)
 const response = await api.submitEvidence({
   ...evidenceData,
   attestation: attestation || undefined,
+  mina_credential: minaCredential || undefined,
 })
 
-// 5. Auto-redirect to evidence detail page
+// 6. Auto-redirect to evidence detail page
 navigate(`/evidence/${response.evidence_id}`)
 ```
 
@@ -996,6 +1210,7 @@ navigate(`/evidence/${response.evidence_id}`)
 3. Initiating FROST signature (3-of-5 threshold)...
 4. Building Zcash shielded transaction...
 5. Broadcasting to testnet...
+6. Posting to NEAR registry...
 ```
 
 **3. Evidence Detail Page** (`/evidence/:evidenceId`)
@@ -1011,8 +1226,9 @@ a) **Status Tracking**
 const statusFlow = [
   'pending',      // Initial submission
   'signing',      // FROST round 1/2
-  'broadcasting', // TX broadcast to Zcash
-  'confirmed'     // Block confirmations
+  'linked',       // Zcash tx linked (hybrid mode)
+  'broadcasting', // TX broadcast to Zcash (full mode)
+  'completed'     // NEAR registry posted
 ]
 ```
 
@@ -1020,7 +1236,7 @@ b) **Zcash Transaction Details**
 - Transaction ID with testnet block explorer link
 - Confirmation count (0 → increasing)
 - Shielded pool information
-- Payment disclosure proofs
+- Payment disclosure proofs (ZIP-311)
 
 c) **IPFS Storage**
 - Content ID (CID) with gateway links
@@ -1032,24 +1248,31 @@ d) **FROST Signature Session**
 ```typescript
 interface FrostSession {
   session_id: string
-  threshold: number        // 3
-  min_signers: number     // 3
-  max_signers: number     // 5
-  current_round: 1 | 2
+  threshold: number        // 2
+  min_signers: number     // 2
+  max_signers: number     // 3
+  current_round: 1 | 2 | 3
   status: 'initializing' | 'round1' | 'round2' | 'completed'
   participants: Array<{
     participant_id: number
     public_key: string
     status: 'joined' | 'round1_complete' | 'round2_complete'
   }>
+  signature: string  // Aggregate signature hex
 }
 ```
+
+e) **NEAR Registry Details**
+- NEAR transaction hash with explorer link
+- Contract: reg.mrhashfox.testnet
+- Evidence record on-chain
+- FROST signature verification status
 
 **4. Browse Evidence** (`/browse`)
 
 **Filtering:**
 - By Board: All, Healthcare, Government, Corporate, Civil Society, Media
-- By Status: All, Confirmed, Pending, Signing, Failed
+- By Status: All, Completed, Pending, Signing, Linked, Failed
 - Search: Evidence ID or IPFS CID
 
 **Evidence Cards:**
@@ -1059,7 +1282,7 @@ interface EvidenceIndex {
   board_category: string
   ipfs_cid: string
   zcash_txid?: string
-  status: 'pending' | 'signing' | 'broadcasting' | 'confirmed' | 'failed'
+  status: 'pending' | 'signing' | 'linked' | 'broadcasting' | 'completed' | 'failed'
   confirmation_count: number
   submission_timestamp: number
   created_at: string
@@ -1067,69 +1290,6 @@ interface EvidenceIndex {
 ```
 
 **Click Navigation:** Any card → `/evidence/{evidence_id}`
-
-### API Integration Layer
-
-**Location:** `frontend/src/services/api.ts`
-
-**Complete Backend Integration:**
-
-```typescript
-class ZKFIEDApi {
-  private baseURL = 'https://zkfied-frost-testnet.fly.dev'
-
-  // Evidence Submission
-  async submitEvidence(req: SubmitEvidenceRequest): Promise<SubmitEvidenceResponse>
-
-  // Evidence Retrieval
-  async getEvidenceIndex(evidenceId: string): Promise<EvidenceIndex>
-  async getEvidenceByBoard(category: string): Promise<EvidenceIndex[]>
-  async getAllEvidenceIndex(): Promise<EvidenceIndex[]>
-
-  // IPFS Metadata
-  async getEvidenceMetadata(ipfsCid: string): Promise<EvidenceMetadata>
-
-  // FROST Session
-  async getFrostSession(sessionId: string): Promise<FrostSession>
-
-  // System Status
-  async healthCheck(): Promise<{ status: string }>
-  async getStats(): Promise<{ status: string; message: string }>
-
-  // Wallet Address
-  async getWalletAddress(): Promise<WalletAddress>
-
-  // Metrics
-  async getMetrics(): Promise<string>
-}
-```
-
-### WebZjs Integration
-
-**Location:** `frontend/src/components/shared/WebZjsWallet.tsx`
-
-**MetaMask Snap for Zcash:**
-
-```typescript
-const { connect, webzjs } = useWallet()
-
-// Connect to WebZjs Snap
-await connect('webzjs')
-
-// Check connection status
-if (webzjs.isConnected) {
-  // Get seed fingerprint
-  const fingerprint = await webzjs.getSeedFingerprint()
-
-  // Ready for shielded operations
-}
-```
-
-**Features:**
-- Install prompt if snap not detected
-- Connection status indicator
-- Error handling with retry
-- Privacy guarantees display
 
 ---
 
@@ -1139,9 +1299,73 @@ if (webzjs.isConnected) {
 
 **Base URL:** https://zkfied-frost-testnet.fly.dev
 
+#### Hybrid Mode Endpoints
+
+**POST /api/evidence/submit**
+
+Submit evidence in hybrid mode (lightweight, no file upload).
+
+Request:
+```json
+{
+  "evidence_type": "healthcare_whistleblower",
+  "evidence_data": "Hospital safety violation\n\nDetailed description...",
+  "description": "Detailed description..."
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "evidence_id": "evidence_96a8791997bcb4a42dc900cd5ca12324",
+  "proof_generated": true,
+  "message": "Evidence accepted. Type: healthcare_whistleblower, ID: evidence_96a879...",
+  "next_steps": [
+    "Evidence has been processed",
+    "Zero-knowledge proof generated",
+    "Use Zashi wallet to create a shielded transaction",
+    "Include this evidence ID in memo: evidence_96a879...",
+    "Transaction will contain cryptographic proof of evidence"
+  ]
+}
+```
+
+**POST /evidence/:id/link-tx**
+
+Link Zcash transaction to evidence and trigger NEAR posting.
+
+Request:
+```json
+{
+  "zcash_txid": "abc123def456..."
+}
+```
+
+Response:
+```json
+{
+  "evidence_id": "evidence_96a879...",
+  "ipfs_cid": "QmcRA1wNhW8PiiHkFZzZbmW6wpyBh28DttHbiQaJGMGyob",
+  "zcash_txid": "abc123def456...",
+  "frost_session_id": "frost_evidence_96a879...",
+  "status": "completed",
+  "payment_disclosure": "0x7f3a4c8b..."
+}
+```
+
+**what happens automatically:**
+1. Links Zcash transaction to evidence
+2. Generates ZIP-311 payment disclosure
+3. Retrieves FROST signatures from session
+4. Posts to NEAR registry with 3+ signatures
+5. Updates status to "completed"
+
+#### Full Mode Endpoints
+
 **POST /evidence/submit**
 
-Submit evidence with optional attestation.
+Submit evidence with full orchestrator (file upload + automated flow).
 
 Request:
 ```json
@@ -1157,7 +1381,14 @@ Request:
     }
   ],
   "viewing_keys": ["0xabc123..."],
-  "attestation": null
+  "mina_credential": {
+    "proof": "...",
+    "public_input": ["..."],
+    "holder_public_key": "...",
+    "credential_type": 1,
+    "timestamp": 1737849600,
+    "zkapp_address": "B62qjLQo287BXoYZBweHfRN5bikWUFdc81rqECVEiRCBEoYBEGCbNc3"
+  }
 }
 ```
 
@@ -1168,10 +1399,12 @@ Response:
   "zcash_txid": "abc123def456...",
   "ipfs_cid": "QmXoypizjW3WknFiJnKLwHCnL72vedxjQkDDP1mXWo6uco",
   "frost_session_id": "session_001",
-  "status": "pending",
-  "payment_disclosure": null
+  "status": "completed",
+  "payment_disclosure": "0x7f3a..."
 }
 ```
+
+#### Query Endpoints
 
 **GET /evidence/:id**
 
@@ -1184,7 +1417,7 @@ Response:
   "board_category": "healthcare",
   "ipfs_cid": "QmXoy...",
   "zcash_txid": "abc123...",
-  "status": "confirmed",
+  "status": "completed",
   "confirmation_count": 3,
   "submission_timestamp": 1737849600,
   "created_at": "2025-01-26T00:00:00Z"
@@ -1196,17 +1429,19 @@ Response:
 List evidence by board category.
 
 Parameters:
-- `category`: healthcare | government | corporate | civil_society | media
+- `category`: HEALTHCARE | GOVERNMENT | CORPORATE | CIVIL_SOCIETY | MEDIA
 
 Response:
 ```json
 [
   {
-    "evidence_id": "...",
-    "board_category": "healthcare",
-    "ipfs_cid": "...",
-    "status": "confirmed",
-    ...
+    "evidence_id": "evidence_96a879...",
+    "board_category": "HEALTHCARE",
+    "ipfs_cid": "QmcRA1wNhW8Pi...",
+    "zcash_txid": "abc123...",
+    "frost_session_id": "frost_evidence_96a879...",
+    "status": "completed",
+    "payment_disclosure": "0x7f3a..."
   }
 ]
 ```
@@ -1218,25 +1453,47 @@ Get FROST signing session details.
 Response:
 ```json
 {
-  "session_id": "session_001",
-  "evidence_id": "550e8400-...",
-  "threshold": 3,
-  "min_signers": 3,
-  "max_signers": 5,
-  "current_round": 2,
+  "session_id": "frost_evidence_96a879...",
+  "evidence_id": "evidence_96a879...",
+  "threshold": 2,
+  "current_round": 3,
   "status": "completed",
-  "participants": [
-    {
-      "participant_id": 1,
-      "public_key": "0x1234...",
-      "status": "round2_complete"
-    },
-    ...
-  ],
-  "created_at": "2025-01-26T00:00:00Z",
-  "completed_at": "2025-01-26T00:00:05Z"
+  "participant_count": 3,
+  "signature": "1e66670984a85368557c240c469bb743..."
 }
 ```
+
+**GET /ipfs/evidence/:cid**
+
+Retrieve evidence metadata from IPFS.
+
+Response:
+```json
+{
+  "evidence_id": "evidence_96a879...",
+  "board_category": "HEALTHCARE",
+  "title": "Critical Hospital Safety Violation",
+  "description": "Evidence of systematic failure...",
+  "files": [
+    {
+      "filename": "incident_report.txt",
+      "mime_type": "text/plain",
+      "size": 148,
+      "ipfs_hash": "QmYnozEmuxEpWsePqsgecr3b3yh3U9dofsqCUmco1itPGr"
+    }
+  ],
+  "timestamp": 1764528655,
+  "zcash_txid": null,
+  "commitment_hash": "f8540f691e02505850702bbacfedc0bd...",
+  "viewing_keys": []
+}
+```
+
+**GET /ipfs/file/:cid**
+
+Retrieve file content from IPFS.
+
+Response: Raw file content (text, PDF, image, etc.)
 
 **GET /health**
 
@@ -1255,7 +1512,7 @@ Response:
 ```json
 {
   "status": "operational",
-  "message": "ZKFIED FROST Coordinator running"
+  "message": "Database stats coming soon"
 }
 ```
 
@@ -1264,27 +1521,6 @@ Response:
 Prometheus metrics endpoint.
 
 Response: Prometheus text format
-
----
-
-
-### Network Configuration
-
-**Zcash Testnet:**
-- Network: Testnet
-- LightwalletD: https://testnet.lightwalletd.com:9067
-- Block Explorer: https://testnet.zcashblockexplorer.com
-- Faucet: https://faucet.zecpages.com
-
-**NEAR Testnet:**
-- RPC: https://rpc.testnet.near.org
-- Contract: reg.mrhashfox.testnet
-- Explorer: https://explorer.testnet.near.org
-
-**Mina Devnet:**
-- GraphQL: https://api.minascan.io/node/devnet/v1/graphql
-- zkApp: B62qjLQo287BXoYZBweHfRN5bikWUFdc81rqECVEiRCBEoYBEGCbNc3
-- Explorer: https://minascan.io/devnet
 
 ---
 
@@ -1332,9 +1568,13 @@ ZCASH_PARAMS_DIR=~/.zcash-params \
 PORT=3000 \
 RUST_LOG=info \
 ZCASH_NETWORK=testnet \
+NEAR_NETWORK=testnet \
 NEAR_CONTRACT_ID=reg.mrhashfox.testnet \
+NEAR_ACCOUNT_ID=your-account.testnet \
+NEAR_PRIVATE_KEY=ed25519:your_private_key \
+MINA_GRAPHQL_ENDPOINT=https://api.minascan.io/node/devnet/v1/graphql \
 MINA_ZKAPP_ADDRESS=B62qjLQo287BXoYZBweHfRN5bikWUFdc81rqECVEiRCBEoYBEGCbNc3 \
-cargo run --bin zkfied-frost-coordinator
+cargo run --release
 ```
 
 **4. Start frontend:**
@@ -1346,34 +1586,38 @@ npm run dev
 
 **Access:** http://localhost:5173
 
-### Optional: Tor Hidden Service
+### Testing the Hybrid Flow
 
 ```bash
-# Install Tor
-brew install tor  # macOS
-apt install tor   # Linux
+# Terminal 1: IPFS
+ipfs daemon
 
-# Copy config
-cp services/frost-coordinator/torrc /usr/local/etc/tor/torrc
+# Terminal 2: Backend
+cd services/frost-coordinator
+cargo run --release
 
-# Start Tor
-tor -f /usr/local/etc/tor/torrc
+# Terminal 3: Test hybrid submission
+curl -X POST http://localhost:3000/api/evidence/submit \
+  -H "Content-Type: application/json" \
+  -d '{
+    "evidence_type": "healthcare_whistleblower",
+    "evidence_data": "Test evidence",
+    "description": "End-to-end test"
+  }'
 
-# Get .onion address
-cat /var/lib/tor/zkfied_hidden_service/hostname
-```
+# Copy evidence_id from response
 
-### Optional: I2P Router
+# Create Zcash transaction in Zashi wallet
+# Include evidence_id in memo
 
-```bash
-# Download I2P
-wget https://geti2p.net/download/i2pinstall.jar
-java -jar i2pinstall.jar
+# Link transaction
+curl -X POST http://localhost:3000/evidence/{evidence_id}/link-tx \
+  -H "Content-Type: application/json" \
+  -d '{"zcash_txid": "your_zcash_txid"}'
 
-# Start router
-i2prouter start
-
-# Access console: http://127.0.0.1:7657
+# Verify NEAR posting
+near view reg.mrhashfox.testnet get_evidence \
+  '{"evidence_id": "your_evidence_id"}'
 ```
 
 ---
@@ -1400,49 +1644,71 @@ cd frontend
 npm test
 ```
 
-### End-to-End Flow
+### end 2 end hybrid flow
 
 ```bash
-# Terminal 1: IPFS
-ipfs daemon
-
-# Terminal 2: Backend
-cd services/frost-coordinator
-cargo run --bin zkfied-frost-coordinator
-
-# Terminal 3: Frontend
-cd frontend
-npm run dev
+# Start all services
+# See "Testing the Hybrid Flow" section above
 
 # Browser: http://localhost:5173
-# Submit evidence and verify full flow
+# 1. Submit evidence in hybrid mode
+# 2. Create Zcash TX with Zashi
+# 3. Link transaction
+# 4. Verify on NEAR: https://testnet.nearblocks.io/address/reg.mrhashfox.testnet
 ```
+
 ---
 
-## what we want to do next 
+## NETWORK CONFIG
 
-### mainnet 
+**Zcash Testnet:**
+- Network: Testnet
+- LightwalletD: https://testnet.lightwalletd.com:9067
+- Block Explorer: https://testnet.zcashblockexplorer.com
+- Alternative Explorer: https://testnet.cipherscan.app
+- Faucet: https://faucet.zecpages.com
 
-- Deploy to Zcash mainnet (currently testnet)
-- Wait for ZIP-226 (ZSA) mainnet activation
+**NEAR Testnet:**
+- RPC: https://rpc.testnet.near.org
+- Contract: reg.mrhashfox.testnet
+- Explorer: https://testnet.nearblocks.io
+- Contract Explorer: https://testnet.nearblocks.io/address/reg.mrhashfox.testnet
+- Faucet: https://near-faucet.io/
+
+**Mina Devnet:**
+- GraphQL: https://api.minascan.io/node/devnet/v1/graphql
+- zkApp: B62qjLQo287BXoYZBweHfRN5bikWUFdc81rqECVEiRCBEoYBEGCbNc3
+- Explorer: https://minascan.io/devnet
+- Account Explorer: https://minascan.io/devnet/account/B62qjLQo287BXoYZBweHfRN5bikWUFdc81rqECVEiRCBEoYBEGCbNc3
+- Faucet: https://faucet.minaprotocol.com/
+
+---
+
+## what we want to do next
+
+### mainnet
+
+- Deploy to Zcash mainnet 
+- Wait for ZIP-226 mainnet activation
 - NEAR mainnet contract deployment
 - Mina mainnet zkApp deployment
-- Production IPFS cluster (3+ nodes)
+- Production IPFS cluster 
 - Custom domain (zkfied.com)
 
-### privacy 
+### privacy
 
-- File encryption before IPFS upload (AES-GCM)
-- Decoy traffic (fake evidence for timing obfuscation)
-- Mixnet integration (Nym Network)
-- Postquantum signatures (Dilithium, SPHINCS+)
-
+- File encryption before IPFS upload 
+- Decoy traffic 
+- Postquantum signatures
+- Payment disclosure selective reveal
+- viewing key management
 
 ### upcoming features
 
-- Multi evidence 
+- Multi-evidence submission (batch uploads)
 - Reputation system for viewers
 - Whistleblower rewards (ZSA tokens)
+- Evidence expiration policies
 
 ---
 
@@ -1467,3 +1733,6 @@ contributions welcome:
 - ZK circuits (recursive proofs, aggregation)
 - Mainnet deployment support
 - Post quantum cryptography integration
+- Hybrid flow improvement
+- NEAR contract optimization
+- Mina zkApp optimization
