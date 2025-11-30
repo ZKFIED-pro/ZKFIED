@@ -2,9 +2,8 @@
 
 **Production stack: Zcash Shielded Transactions, FROST Threshold Signatures (3-of-5), ZK Attestations, IPFS, Tor/I2P Hidden Services, NEAR Protocol Registry, Mina zkApps**
 
-Production deployment: https://zkfied.vercel.app
-Backend: https://zkfied-frost-testnet.fly.dev
-
+**Production deployment:** https://zkfied.vercel.app
+**Backend**: https://zkfied-frost-testnet.fly.dev
 **NEAR Contract:** https://testnet.nearblocks.io/address/reg.mrhashfox.testnet
 **Mina zkApp:** https://minascan.io/devnet/account/B62qjLQo287BXoYZBweHfRN5bikWUFdc81rqECVEiRCBEoYBEGCbNc3
 
