@@ -15,6 +15,10 @@ export default defineConfig({
       '@/context': resolve(__dirname, 'src/context')
     }
   },
+  define: {
+    'global': 'globalThis',
+    'process.env': {}
+  },
   server: {
     port: 5173,
     host: true
