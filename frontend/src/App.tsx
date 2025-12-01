@@ -9,7 +9,7 @@ import Navbar from '@/components/shared/Navbar'
 import HomePage from '@/components/pages/HomePage'
 import SubmitEvidencePage from '@/components/pages/SubmitEvidencePage'
 import BrowseEvidencePage from '@/components/pages/BrowseEvidencePage'
-import CrossChainPage from '@/components/pages/CrossChainPage'
+import HowItWorksPage from '@/components/pages/HowItWorksPage'
 import ProfilePage from '@/components/pages/ProfilePage'
 import EvidenceDetailPage from '@/components/pages/EvidenceDetailPage'
 
@@ -54,7 +54,7 @@ function App() {
           <Route path="/submit" element={<SubmitEvidencePage />} />
           <Route path="/browse" element={<BrowseEvidencePage />} />
           <Route path="/evidence/:evidenceId" element={<EvidenceDetailPage />} />
-          <Route path="/crosschain" element={<CrossChainPage />} />
+          <Route path="/how-it-works" element={<HowItWorksPage />} />
           <Route path="/profile" element={<ProfilePage />} />
 
           {/* Catch-all route for 404 */}

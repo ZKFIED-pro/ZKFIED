@@ -29,7 +29,7 @@ const Navbar: React.FC = () => {
   const navigation = [
     { name: 'Submit Evidence', href: '/submit' },
     { name: 'Browse', href: '/browse' },
-    { name: 'Cross-chain', href: '/crosschain' },
+    { name: 'How It Works', href: '/how-it-works' },
   ]
   
   const isActive = (href: string) => {
