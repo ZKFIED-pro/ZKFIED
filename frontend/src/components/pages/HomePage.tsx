@@ -48,8 +48,35 @@ const HomePage: React.FC = () => {
 
   return (
     <div className="fade-in">
-      <section className="section bg-black" style={{ paddingTop: '120px', paddingBottom: '120px' }}>
-        <div className="container">
+      <section className="section bg-black" style={{
+        paddingTop: '120px',
+        paddingBottom: '120px',
+        position: 'relative',
+        overflow: 'hidden'
+      }}>
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundImage: 'url(/images/1.jpg)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+          filter: 'grayscale(100%) contrast(1.3)',
+          zIndex: 0
+        }} />
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          zIndex: 1
+        }} />
+        <div className="container" style={{ position: 'relative', zIndex: 2 }}>
           <div className="text-center" style={{ maxWidth: '900px', margin: '0 auto' }}>
             <h1 style={{ marginBottom: '24px' }}>
               ZKFIED
@@ -126,8 +153,30 @@ const HomePage: React.FC = () => {
         </div>
       </section>
 
-      <section className="section">
-        <div className="container">
+      <section className="section" style={{ position: 'relative', overflow: 'hidden' }}>
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundImage: 'url(/images/4.jpg)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+          filter: 'grayscale(100%) contrast(1.3)',
+          zIndex: 0
+        }} />
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.85)',
+          zIndex: 1
+        }} />
+        <div className="container" style={{ position: 'relative', zIndex: 2 }}>
           <div className="mb-lg">
             <h2 className="mb-sm">Board Categories</h2>
             <p className="text-gray">
@@ -240,8 +289,31 @@ const HomePage: React.FC = () => {
         </div>
       </section>
 
-      <section className="section" style={{ borderTop: '1px solid rgb(52, 52, 52)', borderBottom: '1px solid rgb(52, 52, 52)' }}>
-        <div className="container text-center">
+      <section className="section" style={{ borderTop: '1px solid rgb(52, 52, 52)', borderBottom: '1px solid rgb(52, 52, 52)', position: 'relative', overflow: 'hidden' }}>
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundImage: 'url(/images/3.jpg)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+          filter: 'grayscale(100%) contrast(1.3)',
+          transform: 'scaleX(-1)',
+          zIndex: 0
+        }} />
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.85)',
+          zIndex: 1
+        }} />
+        <div className="container text-center" style={{ position: 'relative', zIndex: 2 }}>
           <div style={{ maxWidth: '700px', margin: '0 auto' }}>
             <h2 className="mb-md">Ready to Submit?</h2>
             <p className="text-gray mb-lg">
