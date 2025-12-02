@@ -38,33 +38,60 @@ pub struct AppState {
 }
 
 pub async fn submit_evidence(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Json(evidence): Json<EvidenceSubmission>,
 ) -> impl IntoResponse {
     tracing::info!("Received evidence submission: type={}", evidence.evidence_type);
 
-    let evidence_id = uuid::Uuid::new_v4().to_string();
+    let evidence_id = format!("evidence_{}", uuid::Uuid::new_v4().to_string().replace("-", ""));
+    let board_category = evidence.evidence_type
+        .replace("_whistleblower", "")
+        .to_lowercase();
 
-    let response = EvidenceResponse {
-        success: true,
-        evidence_id: evidence_id.clone(),
-        proof_generated: true,
-        message: format!(
-            "Evidence accepted. Type: {}, ID: {}",
-            evidence.evidence_type, evidence_id
-        ),
-        next_steps: vec![
-            "Evidence has been processed".to_string(),
-            "Zero-knowledge proof generated".to_string(),
-            "Use Zashi wallet to create a shielded transaction".to_string(),
-            format!("Include this evidence ID in memo: {}", evidence_id),
-            "Transaction will contain cryptographic proof of evidence".to_string(),
-        ],
-    };
+    match state.db.insert_evidence(
+        &evidence_id,
+        "",
+        &board_category,
+        &evidence.evidence_data,
+        &evidence.description,
+        "",
+        chrono::Utc::now().timestamp(),
+    ).await {
+        Ok(_) => {
+            let response = EvidenceResponse {
+                success: true,
+                evidence_id: evidence_id.clone(),
+                proof_generated: true,
+                message: format!(
+                    "Evidence accepted. Type: {}, ID: {}",
+                    evidence.evidence_type, evidence_id
+                ),
+                next_steps: vec![
+                    "Evidence has been processed".to_string(),
+                    "Zero-knowledge proof generated".to_string(),
+                    "Use Zashi wallet to create a shielded transaction".to_string(),
+                    format!("Include this evidence ID in memo: {}", evidence_id),
+                    "Transaction will contain cryptographic proof of evidence".to_string(),
+                ],
+            };
 
-    tracing::info!("Evidence processed successfully: {}", evidence_id);
-
-    (StatusCode::OK, Json(response))
+            tracing::info!("Evidence processed successfully: {}", evidence_id);
+            (StatusCode::OK, Json(response))
+        }
+        Err(e) => {
+            tracing::error!("Failed to insert evidence into database: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(EvidenceResponse {
+                    success: false,
+                    evidence_id: String::new(),
+                    proof_generated: false,
+                    message: format!("Failed to save evidence: {}", e),
+                    next_steps: vec![],
+                }),
+            )
+        }
+    }
 }
 
 pub async fn health_check() -> impl IntoResponse {

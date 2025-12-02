@@ -3,6 +3,7 @@ export interface EvidenceIndex {
   board_category: 'healthcare' | 'government' | 'corporate' | 'civil_society' | 'media'
   ipfs_cid: string
   zcash_txid?: string
+  near_tx_hash?: string
   status: 'pending' | 'signing' | 'broadcasting' | 'confirmed' | 'failed'
   confirmation_count: number
   submission_timestamp: number

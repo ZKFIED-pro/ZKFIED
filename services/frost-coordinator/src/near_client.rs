@@ -180,7 +180,7 @@ impl NearTransactionManager {
                 method_name: "register_evidence".to_string(),
                 args: args_json,
                 gas: 100_000_000_000_000,
-                deposit: 1_000_000_000_000_000_000_000_000,
+                deposit: 10_000_000_000_000_000_000_000_000,
             }))],
         });
 
