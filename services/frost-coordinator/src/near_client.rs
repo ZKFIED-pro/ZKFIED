@@ -180,7 +180,7 @@ impl NearTransactionManager {
                 method_name: "register_evidence".to_string(),
                 args: args_json,
                 gas: 100_000_000_000_000,
-                deposit: 10_000_000_000_000_000_000_000_000,
+                deposit: 100_000_000_000_000_000_000_000, // 0.1 NEAR
             }))],
         });
 
@@ -192,9 +192,13 @@ impl NearTransactionManager {
         };
 
         let response = self.client.call(request).await
-            .context("Failed to broadcast NEAR transaction")?;
+            .map_err(|e| {
+                tracing::error!("NEAR RPC error details: {:?}", e);
+                anyhow::anyhow!("Failed to broadcast NEAR transaction: {:?}", e)
+            })?;
 
         if let near_primitives::views::FinalExecutionStatus::Failure(failure) = response.status {
+            tracing::error!("NEAR transaction execution failed: {:?}", failure);
             bail!("NEAR transaction failed: {:?}", failure);
         }
 
