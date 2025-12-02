@@ -1,14 +1,17 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, type AttestationGrant, type MinaCredentialProof, type HybridEvidenceResponse } from '@/services/api'
+import { api, type AttestationGrant, type MinaCredentialProof, type HybridEvidenceResponse, type OtpVerifyResponse } from '@/services/api'
 import WebZjsWallet from '../shared/WebZjsWallet'
 import { useWallet } from '@/hooks/useWallet'
+import OtpAuth from '../auth/OtpAuth'
 
 type SubmissionMode = 'hybrid' | 'full'
 
 const SubmitEvidencePage: React.FC = () => {
   const navigate = useNavigate()
   const { webzjs } = useWallet()
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [userSession, setUserSession] = useState<OtpVerifyResponse | null>(null)
   const [mode, setMode] = useState<SubmissionMode>('hybrid')
   const [attestation, setAttestation] = useState<AttestationGrant | undefined>(undefined)
   const [boardCategory, setBoardCategory] = useState<'healthcare' | 'government' | 'corporate' | 'civil_society' | 'media'>('healthcare')
@@ -37,6 +40,11 @@ const SubmitEvidencePage: React.FC = () => {
     }
   }
 
+  const handleAuthenticated = (session: OtpVerifyResponse) => {
+    setUserSession(session)
+    setIsAuthenticated(true)
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(undefined)
@@ -47,9 +55,13 @@ const SubmitEvidencePage: React.FC = () => {
       return
     }
 
-    // Hybrid mode doesn't require WebZjs wallet
     if (mode === 'full' && !webzjs.isConnected) {
       setError('WebZjs wallet connection is required for full orchestrator mode')
+      return
+    }
+
+    if (mode === 'hybrid' && !userSession) {
+      setError('Authentication required for hybrid mode')
       return
     }
 
@@ -57,11 +69,24 @@ const SubmitEvidencePage: React.FC = () => {
       setSubmitting(true)
 
       if (mode === 'hybrid') {
-        // Hybrid mode: Submit to /api/evidence/submit, get evidence ID back
+        let minaCredential: MinaCredentialProof | undefined
+        if (showMinaCredential && minaProof && minaHolderKey) {
+          minaCredential = {
+            proof: minaProof,
+            public_input: minaPublicInput.split(',').map(s => s.trim()).filter(Boolean),
+            holder_public_key: minaHolderKey,
+            credential_type: minaCredentialType,
+            timestamp: Date.now(),
+            zkapp_address: minaZkappAddress,
+          }
+        }
+
         const response = await api.submitHybridEvidence({
+          session_id: userSession.session_id,
           evidence_type: `${boardCategory}_whistleblower`,
           evidence_data: `${title}\n\n${description}`,
           description: description,
+          mina_credential: minaCredential,
         })
 
         setHybridResponse(response)
@@ -209,6 +234,34 @@ const SubmitEvidencePage: React.FC = () => {
               </div>
             </div>
           </div>
+
+          {mode === 'hybrid' && !isAuthenticated && (
+            <OtpAuth onAuthenticated={handleAuthenticated} />
+          )}
+
+          {mode === 'hybrid' && isAuthenticated && userSession && (
+            <div className="st-card" style={{ marginBottom: '24px' }}>
+              <div className="st-card-inner">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <h3 style={{ fontSize: '12px', marginBottom: '4px' }}>Authenticated</h3>
+                    <p className="text-gray" style={{ fontSize: '10px' }}>{userSession.email}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAuthenticated(false)
+                      setUserSession(null)
+                    }}
+                    className="st-btn"
+                    style={{ padding: '6px 12px', fontSize: '10px' }}
+                  >
+                    Sign Out
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {mode === 'full' && <WebZjsWallet />}
 

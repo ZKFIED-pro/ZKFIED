@@ -92,10 +92,39 @@ export interface SubmitEvidenceResponse {
 }
 
 export interface HybridEvidenceRequest {
+  session_id: string
   evidence_type: string
   evidence_data: string
   description: string
   zashi_tx_id?: string
+  mina_credential?: MinaCredentialProof
+}
+
+export interface OtpRequestResponse {
+  success: boolean
+  session_id: string
+  message: string
+}
+
+export interface OtpVerifyResponse {
+  session_id: string
+  is_verified: boolean
+  email: string
+  mina_credential_hash: string | null
+  board_type: number | null
+}
+
+export interface UserSession {
+  session_id: string
+  is_verified: boolean
+  email: string
+  mina_credential_hash: string | null
+  board_type: number | null
+}
+
+export interface MyEvidenceResponse {
+  success: boolean
+  evidence_ids: string[]
 }
 
 export interface HybridEvidenceResponse {
@@ -305,6 +334,40 @@ class ZKFIEDApi {
     return this.request(`/evidence/${evidenceId}/link-tx`, {
       method: 'POST',
       body: JSON.stringify({ zcash_txid: zcashTxid }),
+    })
+  }
+
+  async requestOtp(email: string, minaCredentialHash?: string): Promise<OtpRequestResponse> {
+    return this.request('/api/auth/request-otp', {
+      method: 'POST',
+      body: JSON.stringify({
+        email,
+        mina_credential_hash: minaCredentialHash
+      }),
+    })
+  }
+
+  async verifyOtp(sessionId: string, otpCode: string): Promise<OtpVerifyResponse> {
+    return this.request('/api/auth/verify-otp', {
+      method: 'POST',
+      body: JSON.stringify({
+        session_id: sessionId,
+        otp_code: otpCode
+      }),
+    })
+  }
+
+  async getSession(sessionId: string): Promise<UserSession> {
+    return this.request('/api/auth/session', {
+      method: 'POST',
+      body: JSON.stringify({ session_id: sessionId }),
+    })
+  }
+
+  async getMyEvidence(sessionId: string): Promise<MyEvidenceResponse> {
+    return this.request('/api/evidence/my-evidence', {
+      method: 'POST',
+      body: JSON.stringify({ session_id: sessionId }),
     })
   }
 }
