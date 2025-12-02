@@ -187,14 +187,18 @@ impl NearTransactionManager {
         let signature = account.signer.sign(transaction.get_hash_and_size().0.as_ref());
         let signed_tx = SignedTransaction::new(signature, transaction);
 
-        let request = methods::broadcast_tx_async::RpcBroadcastTxAsyncRequest {
+        let request = methods::broadcast_tx_commit::RpcBroadcastTxCommitRequest {
             signed_transaction: signed_tx,
         };
 
-        let tx_hash = self.client.call(request).await
+        let response = self.client.call(request).await
             .context("Failed to broadcast NEAR transaction")?;
 
-        let tx_hash_str = tx_hash.to_string();
+        if let near_primitives::views::FinalExecutionStatus::Failure(failure) = response.status {
+            bail!("NEAR transaction failed: {:?}", failure);
+        }
+
+        let tx_hash_str = response.transaction.hash.to_string();
 
         self.db.record_near_post(
             &evidence_id,
