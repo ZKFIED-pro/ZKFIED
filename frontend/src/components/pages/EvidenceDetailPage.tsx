@@ -180,6 +180,42 @@ const EvidenceDetailPage: React.FC = () => {
             </div>
           )}
 
+          {evidence.near_tx_hash && (
+            <div className="st-card" style={{ marginBottom: '24px' }}>
+              <div className="st-card-inner">
+                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
+                  <Database size={20} style={{ marginRight: '12px', color: '#00a8ff' }} />
+                  <h3 style={{ fontSize: '14px', margin: 0 }}>NEAR Protocol Registration</h3>
+                </div>
+
+                <div style={{ marginBottom: '12px' }}>
+                  <p className="text-gray" style={{ fontSize: '10px', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>Transaction Hash</p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <code style={{ fontSize: '11px', padding: '8px 12px', background: 'rgba(0, 168, 255, 0.05)', border: '1px solid rgba(0, 168, 255, 0.2)', borderRadius: '4px', flex: 1, wordBreak: 'break-all' }}>
+                      {evidence.near_tx_hash}
+                    </code>
+                    <a
+                      href={`https://explorer.testnet.near.org/transactions/${evidence.near_tx_hash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="st-btn"
+                      style={{ padding: '8px 12px', fontSize: '11px', whiteSpace: 'nowrap' }}
+                    >
+                      <ExternalLink size={14} />
+                      Explorer
+                    </a>
+                  </div>
+                </div>
+
+                <div style={{ padding: '12px', border: '1px solid rgb(52, 52, 52)', background: 'rgba(0, 168, 255, 0.02)' }}>
+                  <p className="text-gray" style={{ fontSize: '10px', lineHeight: '16px' }}>
+                    Evidence commitment registered on NEAR Protocol blockchain at contract: reg.mrhashfox.testnet
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {evidence.ipfs_cid && (
             <div className="st-card" style={{ marginBottom: '24px' }}>
               <div className="st-card-inner">
