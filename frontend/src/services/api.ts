@@ -300,14 +300,7 @@ class ZKFIEDApi {
     return this.request(`/mina/credential/${credentialHash}`)
   }
 
-  async linkTransaction(evidenceId: string, zcashTxid: string): Promise<{
-    success: boolean
-    evidence_id: string
-    status: string
-    payment_disclosure?: string
-    near_tx_hash?: string
-    message: string
-  }> {
+  async linkTransaction(evidenceId: string, zcashTxid: string): Promise<SubmitEvidenceResponse & { near_tx_hash?: string }> {
     return this.request(`/evidence/${evidenceId}/link-tx`, {
       method: 'POST',
       body: JSON.stringify({ zcash_txid: zcashTxid }),

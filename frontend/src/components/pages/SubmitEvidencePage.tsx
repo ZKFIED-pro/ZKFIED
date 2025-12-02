@@ -156,30 +156,8 @@ const SubmitEvidencePage: React.FC = () => {
 
   return (
     <div className="fade-in">
-      <section style={{ padding: '60px 0 40px', borderBottom: '1px solid rgb(52, 52, 52)', position: 'relative', overflow: 'hidden' }}>
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundImage: 'url(/images/5.jpg)',
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          backgroundRepeat: 'no-repeat',
-          filter: 'grayscale(100%) contrast(1.3)',
-          zIndex: 0
-        }} />
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.7)',
-          zIndex: 1
-        }} />
-        <div className="container" style={{ position: 'relative', zIndex: 2 }}>
+      <section style={{ padding: '60px 0 40px', borderBottom: '1px solid rgb(52, 52, 52)' }}>
+        <div className="container">
           <h1 className="mb-sm">Submit Evidence</h1>
           <p className="text-gray">
             Cryptographically protected whistleblower evidence submission
@@ -447,6 +425,22 @@ const SubmitEvidencePage: React.FC = () => {
                     <li>Evidence registered on NEAR Protocol</li>
                   </ul>
                 </div>
+
+                <button
+                  onClick={() => navigate(`/evidence/${completionResponse.evidence_id}`)}
+                  className="st-btn"
+                  style={{ width: '100%', fontSize: '12px', padding: '14px', marginBottom: '12px', borderColor: 'rgb(0, 255, 136)', color: 'rgb(0, 255, 136)' }}
+                >
+                  View Evidence Details
+                </button>
+
+                <button
+                  onClick={() => navigate('/browse')}
+                  className="st-btn"
+                  style={{ width: '100%', fontSize: '12px', padding: '14px', marginBottom: '12px' }}
+                >
+                  Browse All Evidence
+                </button>
 
                 <button
                   onClick={() => {

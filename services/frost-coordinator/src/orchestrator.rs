@@ -55,6 +55,11 @@ pub struct EvidenceSubmissionResponse {
     pub frost_session_id: String,
     pub status: String,
     pub payment_disclosure: Option<String>,
+    pub board_category: String,
+    pub confirmation_count: i64,
+    pub submission_timestamp: i64,
+    pub created_at: String,
+    pub near_tx_hash: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -249,12 +254,17 @@ impl EvidenceOrchestrator {
         }
 
         Ok(EvidenceSubmissionResponse {
-            evidence_id,
+            evidence_id: evidence_id.clone(),
             ipfs_cid: metadata_cid,
             zcash_txid: None,
             frost_session_id,
             status: "awaiting_zcash_tx".to_string(),
             payment_disclosure: None,
+            board_category: request.board_category,
+            confirmation_count: 0,
+            submission_timestamp: timestamp as i64,
+            created_at: chrono::Utc::now().to_rfc3339(),
+            near_tx_hash: None,
         })
     }
 
@@ -481,6 +491,9 @@ impl EvidenceOrchestrator {
             evidence.status
         };
 
+        let near_posts = self.db.get_evidence_near_posts(evidence_id).await?;
+        let near_tx_hash = near_posts.first().map(|post| post.near_tx_hash.clone());
+
         Ok(EvidenceSubmissionResponse {
             evidence_id: evidence.evidence_id,
             ipfs_cid: evidence.ipfs_cid,
@@ -488,6 +501,11 @@ impl EvidenceOrchestrator {
             frost_session_id,
             status,
             payment_disclosure: None,
+            board_category: evidence.board_category,
+            confirmation_count: evidence.confirmation_count,
+            submission_timestamp: evidence.submission_timestamp,
+            created_at: evidence.created_at,
+            near_tx_hash,
         })
     }
 
@@ -498,6 +516,9 @@ impl EvidenceOrchestrator {
         for evidence in evidence_list {
             let frost_session_id = format!("frost_{}", evidence.evidence_id);
 
+            let near_posts = self.db.get_evidence_near_posts(&evidence.evidence_id).await?;
+            let near_tx_hash = near_posts.first().map(|post| post.near_tx_hash.clone());
+
             responses.push(EvidenceSubmissionResponse {
                 evidence_id: evidence.evidence_id,
                 ipfs_cid: evidence.ipfs_cid,
@@ -505,6 +526,11 @@ impl EvidenceOrchestrator {
                 frost_session_id,
                 status: evidence.status,
                 payment_disclosure: None,
+                board_category: evidence.board_category,
+                confirmation_count: evidence.confirmation_count,
+                submission_timestamp: evidence.submission_timestamp,
+                created_at: evidence.created_at,
+                near_tx_hash,
             });
         }
 
@@ -661,11 +687,16 @@ impl EvidenceOrchestrator {
 
         Ok(EvidenceSubmissionResponse {
             evidence_id: evidence_id.to_string(),
-            ipfs_cid: evidence.ipfs_cid,
+            ipfs_cid: evidence.ipfs_cid.clone(),
             zcash_txid: Some(zcash_txid.to_string()),
             frost_session_id: format!("frost_{}", evidence_id),
             status: "completed".to_string(),
             payment_disclosure: Some(disclosure_hex),
+            board_category: evidence.board_category,
+            confirmation_count: evidence.confirmation_count,
+            submission_timestamp: evidence.submission_timestamp,
+            created_at: evidence.created_at,
+            near_tx_hash: Some(near_tx_hash),
         })
     }
 
