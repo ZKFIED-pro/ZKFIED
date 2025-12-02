@@ -670,7 +670,12 @@ impl EvidenceOrchestrator {
             })
             .collect();
 
-        let commitment_bytes = hex::decode(&evidence.commitment_hash)?;
+        let commitment_bytes = hex::decode(&evidence.commitment_hash)
+            .context("Failed to decode commitment hash")?;
+
+        if commitment_bytes.len() != 32 {
+            bail!("Commitment hash must be exactly 32 bytes, got {} bytes", commitment_bytes.len());
+        }
 
         let near_tx_hash = self.near.register_evidence(
             evidence_id.to_string(),
