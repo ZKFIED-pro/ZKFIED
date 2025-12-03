@@ -1,30 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import clsx from 'clsx'
 import { useWallet } from '@/hooks/useWallet'
-import { Shield, ExternalLink, CheckCircle, AlertCircle } from 'lucide-react'
+import { ExternalLink, CheckCircle, AlertCircle } from 'lucide-react'
 
 const Navbar: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
-  const [showWalletDropdown, setShowWalletDropdown] = useState(false)
   const location = useLocation()
   const { connect, webzjs } = useWallet()
-  const dropdownRef = useRef<HTMLDivElement>(null)
-
-  
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setShowWalletDropdown(false)
-      }
-    }
-
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [])
   
   const navigation = [
     { name: 'Submit Evidence', href: '/submit' },
@@ -41,14 +25,11 @@ const Navbar: React.FC = () => {
 
   const handleConnectWallet = async () => {
     if (webzjs.isConnected) {
-    
-      setShowWalletDropdown(!showWalletDropdown)
       return
     }
 
     try {
       setIsConnecting(true)
-      setShowWalletDropdown(false)
       
       if (typeof window.ethereum === 'undefined') {
         const installMetaMask = confirm('MetaMask is required to use WebZjs wallet. Would you like to install MetaMask now?')
@@ -94,38 +75,6 @@ const Navbar: React.FC = () => {
       }
     } finally {
       setIsConnecting(false)
-    }
-  }
-
-
-  const handleSignTransaction = async () => {
-    try {
-      const result = await webzjs.signPczt(
-        'ztestsapling1whatever12345678901234567890123456789012345678901234567890',
-        '100000', // 0.001 ZEC in zatoshis
-        'Test transaction from ZKFIED frontend'
-      )
-      alert(`Transaction signed successfully!\n\nSignature: ${result.substring(0, 50)}...`)
-    } catch (error: any) {
-      alert(`Transaction signing failed: ${error.message}`)
-    }
-  }
-
-  const handleGetViewingKey = async () => {
-    try {
-      const viewingKey = await webzjs.getViewingKey(window.location.origin)
-      alert(`Viewing Key for ${window.location.origin}:\n\n${viewingKey.substring(0, 50)}...`)
-    } catch (error: any) {
-      alert(`Failed to get viewing key: ${error.message}`)
-    }
-  }
-
-  const handleGetSeedFingerprint = async () => {
-    try {
-      const fingerprint = await webzjs.getSeedFingerprint()
-      alert(`Wallet Seed Fingerprint:\n\n${fingerprint}`)
-    } catch (error: any) {
-      alert(`Failed to get seed fingerprint: ${error.message}`)
     }
   }
 
@@ -205,74 +154,23 @@ const Navbar: React.FC = () => {
           {/* Desktop Actions */}
           <div className="hidden md:flex items-center gap-4 relative">
             {webzjs.isConnected ? (
-              <div className="relative" ref={dropdownRef}>
-                <div className="flex flex-col items-end gap-1">
-                  <button 
-                    onClick={() => setShowWalletDropdown(!showWalletDropdown)}
-                    className={clsx(
-                      'bracket-btn border-2 px-4 py-2 text-sm font-mono font-bold flex items-center gap-2',
-                      getWalletStatus().color,
-                      getWalletStatus().bgColor
-                    )}
-                  >
-                    <CheckCircle size={16} />
-                    {getWalletStatus().text}
-                  </button>
-                  <button 
-                    onClick={handleOpenExtension}
-                    className="text-xs text-terminal-muted hover:text-terminal-primary transition-colors font-mono flex items-center gap-1"
-                  >
-                    WebZjs Page <ExternalLink size={10} />
-                  </button>
-                </div>
-                
-                {showWalletDropdown && (
-                  <div className="absolute right-0 mt-2 w-80 bg-black border-2 border-terminal-bright rounded-md shadow-lg z-50">
-                    <div className="p-4 space-y-3">
-                      <div className="flex items-center gap-2">
-                        <Shield size={16} className="text-green-400" />
-                        <span className="text-sm font-mono text-white">WebZjs Connected</span>
-                      </div>
-                      <div className="text-xs text-terminal-muted font-mono">
-                        Zcash privacy features enabled
-                      </div>
-                      
-                      {/* Transaction Signing Demo */}
-                      <div className="border-t border-terminal-dark pt-3">
-                        <div className="text-xs text-white font-mono mb-2">Quick Actions:</div>
-                        <div className="space-y-2">
-                          <button 
-                            onClick={() => handleSignTransaction()}
-                            className="w-full text-xs text-left px-2 py-1 border border-terminal-dark hover:border-terminal-primary transition-colors font-mono text-terminal-muted hover:text-white"
-                          >
-                            🔐 Sign Test Transaction
-                          </button>
-                          <button 
-                            onClick={() => handleGetViewingKey()}
-                            className="w-full text-xs text-left px-2 py-1 border border-terminal-dark hover:border-terminal-primary transition-colors font-mono text-terminal-muted hover:text-white"
-                          >
-                            👁️ Get Viewing Key
-                          </button>
-                          <button 
-                            onClick={() => handleGetSeedFingerprint()}
-                            className="w-full text-xs text-left px-2 py-1 border border-terminal-dark hover:border-terminal-primary transition-colors font-mono text-terminal-muted hover:text-white"
-                          >
-                            🔍 Show Seed Fingerprint
-                          </button>
-                        </div>
-                      </div>
-                      
-                      <div className="border-t border-terminal-dark pt-3">
-                        <button 
-                          onClick={() => window.open('https://webzjs.chainsafe.dev', '_blank')}
-                          className="text-xs text-terminal-primary hover:text-white transition-colors font-mono flex items-center gap-1"
-                        >
-                          Manage Wallet <ExternalLink size={12} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
+              <div className="flex flex-col items-end gap-1">
+                <button
+                  className={clsx(
+                    'bracket-btn border-2 px-4 py-2 text-sm font-mono font-bold flex items-center gap-2',
+                    getWalletStatus().color,
+                    getWalletStatus().bgColor
+                  )}
+                >
+                  <CheckCircle size={16} />
+                  {getWalletStatus().text}
+                </button>
+                <button
+                  onClick={handleOpenExtension}
+                  className="text-xs text-terminal-muted hover:text-terminal-primary transition-colors font-mono flex items-center gap-1"
+                >
+                  WebZjs Page <ExternalLink size={10} />
+                </button>
               </div>
             ) : (
               <button 
@@ -303,10 +201,6 @@ const Navbar: React.FC = () => {
                 )}
               </button>
             )}
-            
-            <button className="text-terminal-muted hover:text-terminal-white transition-colors font-mono text-sm">
-              [SETTINGS]
-            </button>
           </div>
           
           {/* Mobile menu button */}

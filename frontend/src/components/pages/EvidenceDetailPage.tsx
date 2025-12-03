@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { api, type EvidenceIndex, type FrostSession, type EvidenceMetadata } from '@/services/api'
-import { ExternalLink, Shield, Database, Clock, CheckCircle, XCircle, Loader } from 'lucide-react'
+import { ExternalLink, Clock, CheckCircle, XCircle, Loader } from 'lucide-react'
 
 const EvidenceDetailPage: React.FC = () => {
   const { evidenceId } = useParams<{ evidenceId: string }>()
@@ -148,7 +148,6 @@ const EvidenceDetailPage: React.FC = () => {
             <div className="st-card" style={{ marginBottom: '24px' }}>
               <div className="st-card-inner">
                 <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
-                  <Shield size={20} style={{ marginRight: '12px', color: '#00ff88' }} />
                   <h3 style={{ fontSize: '14px', margin: 0 }}>Zcash Transaction</h3>
                 </div>
 
@@ -184,7 +183,6 @@ const EvidenceDetailPage: React.FC = () => {
             <div className="st-card" style={{ marginBottom: '24px' }}>
               <div className="st-card-inner">
                 <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
-                  <Database size={20} style={{ marginRight: '12px', color: '#00a8ff' }} />
                   <h3 style={{ fontSize: '14px', margin: 0 }}>NEAR Protocol Registration</h3>
                 </div>
 
@@ -220,7 +218,6 @@ const EvidenceDetailPage: React.FC = () => {
             <div className="st-card" style={{ marginBottom: '24px' }}>
               <div className="st-card-inner">
                 <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
-                  <Database size={20} style={{ marginRight: '12px', color: '#00a8ff' }} />
                   <h3 style={{ fontSize: '14px', margin: 0 }}>IPFS Storage</h3>
                 </div>
 
