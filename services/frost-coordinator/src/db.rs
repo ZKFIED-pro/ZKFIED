@@ -121,6 +121,21 @@ pub struct FrostAuthorizationRecord {
     pub created_at: i64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserSessionRecord {
+    pub id: i64,
+    pub session_id: String,
+    pub email: String,
+    pub otp_code: String,
+    pub otp_expires_at: i64,
+    pub is_verified: i64,
+    pub mina_credential_hash: Option<String>,
+    pub board_type: Option<i64>,
+    pub created_at: i64,
+    pub verified_at: Option<i64>,
+    pub expires_at: i64,
+}
+
 impl Database {
     pub async fn new(database_url: &str) -> Result<Self> {
         // Add mode=rwc for SQLite URLs (r=read, w=write, c=create)
@@ -967,6 +982,174 @@ impl Database {
 
         Ok(result.and_then(|row| row.try_get("payment_disclosure").ok()))
     }
+
+    pub async fn update_evidence_hybrid_flow(
+        &self,
+        evidence_id: &str,
+        submission_type: &str,
+        frost_signature_count: i64,
+        registration_path: &str,
+    ) -> Result<()> {
+        sqlx::query(
+            "UPDATE evidence_submissions
+             SET submission_type = ?, frost_signature_count = ?, registration_path = ?, updated_at = CURRENT_TIMESTAMP
+             WHERE evidence_id = ?"
+        )
+        .bind(submission_type)
+        .bind(frost_signature_count)
+        .bind(registration_path)
+        .bind(evidence_id)
+        .execute(&self.pool)
+        .await
+        .context("Failed to update evidence hybrid flow")?;
+
+        Ok(())
+    }
+
+    pub async fn insert_hybrid_flow_log(
+        &self,
+        evidence_id: &str,
+        flow_stage: &str,
+        signature_count: Option<i64>,
+        details: Option<&str>,
+    ) -> Result<()> {
+        sqlx::query(
+            "INSERT INTO hybrid_flow_log (evidence_id, flow_stage, signature_count, details)
+             VALUES (?1, ?2, ?3, ?4)"
+        )
+        .bind(evidence_id)
+        .bind(flow_stage)
+        .bind(signature_count)
+        .bind(details)
+        .execute(&self.pool)
+        .await
+        .context("Failed to insert hybrid flow log")?;
+
+        Ok(())
+    }
+
+    pub async fn get_frost_signature_count(&self, evidence_id: &str) -> Result<i64> {
+        let session_id = format!("frost_{}", evidence_id);
+
+        let count = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM frost_participants
+             WHERE session_id = ? AND round2_signature_share IS NOT NULL"
+        )
+        .bind(&session_id)
+        .fetch_one(&self.pool)
+        .await
+        .context("Failed to get FROST signature count")?;
+
+        Ok(count)
+    }
+
+    pub async fn update_frost_session_threshold_status(
+        &self,
+        session_id: &str,
+        collected_signatures: i64,
+        threshold_met: bool,
+    ) -> Result<()> {
+        sqlx::query(
+            "UPDATE frost_signing_sessions
+             SET collected_signatures = ?, threshold_met = ?
+             WHERE session_id = ?"
+        )
+        .bind(collected_signatures)
+        .bind(threshold_met)
+        .bind(session_id)
+        .execute(&self.pool)
+        .await
+        .context("Failed to update FROST session threshold status")?;
+
+        Ok(())
+    }
+
+    pub async fn create_user_session(
+        &self,
+        session_id: &str,
+        email: &str,
+        otp_code: &str,
+        otp_expires_at: i64,
+        mina_credential_hash: Option<&str>,
+        board_type: Option<i64>,
+        created_at: i64,
+        expires_at: i64,
+    ) -> Result<()> {
+        sqlx::query(
+            "INSERT INTO user_sessions
+             (session_id, email, otp_code, otp_expires_at, mina_credential_hash, board_type, created_at, expires_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)"
+        )
+        .bind(session_id)
+        .bind(email)
+        .bind(otp_code)
+        .bind(otp_expires_at)
+        .bind(mina_credential_hash)
+        .bind(board_type)
+        .bind(created_at)
+        .bind(expires_at)
+        .execute(&self.pool)
+        .await
+        .context("Failed to create user session")?;
+
+        Ok(())
+    }
+
+    pub async fn get_user_session(&self, session_id: &str) -> Result<Option<UserSessionRecord>> {
+        let session = sqlx::query_as::<_, UserSessionRecord>(
+            "SELECT * FROM user_sessions WHERE session_id = ?"
+        )
+        .bind(session_id)
+        .fetch_optional(&self.pool)
+        .await
+        .context("Failed to get user session")?;
+
+        Ok(session)
+    }
+
+    pub async fn mark_session_verified(&self, session_id: &str, verified_at: i64) -> Result<()> {
+        sqlx::query(
+            "UPDATE user_sessions
+             SET is_verified = 1, verified_at = ?
+             WHERE session_id = ?"
+        )
+        .bind(verified_at)
+        .bind(session_id)
+        .execute(&self.pool)
+        .await
+        .context("Failed to mark session as verified")?;
+
+        Ok(())
+    }
+
+    pub async fn link_evidence_to_session(&self, session_id: &str, evidence_id: &str) -> Result<()> {
+        let now = chrono::Utc::now().timestamp();
+
+        sqlx::query(
+            "INSERT INTO user_evidence (session_id, evidence_id, created_at)
+             VALUES (?1, ?2, ?3)"
+        )
+        .bind(session_id)
+        .bind(evidence_id)
+        .bind(now)
+        .execute(&self.pool)
+        .await
+        .context("Failed to link evidence to session")?;
+
+        Ok(())
+    }
+
+    pub async fn get_user_evidence_list(&self, session_id: &str) -> Result<Vec<String>> {
+        let evidence_ids = sqlx::query_scalar::<_, String>(
+            "SELECT evidence_id FROM user_evidence WHERE session_id = ? ORDER BY created_at DESC"
+        )
+        .bind(session_id)
+        .fetch_all(&self.pool)
+        .await
+        .context("Failed to get user evidence list")?;
+
+        Ok(evidence_ids)
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1113,6 +1296,24 @@ impl sqlx::FromRow<'_, sqlx::sqlite::SqliteRow> for FrostAuthorizationRecord {
             authorized_at: row.try_get("authorized_at")?,
             expires_at: row.try_get("expires_at")?,
             created_at: row.try_get("created_at")?,
+        })
+    }
+}
+
+impl sqlx::FromRow<'_, sqlx::sqlite::SqliteRow> for UserSessionRecord {
+    fn from_row(row: &sqlx::sqlite::SqliteRow) -> sqlx::Result<Self> {
+        Ok(Self {
+            id: row.try_get("id")?,
+            session_id: row.try_get("session_id")?,
+            email: row.try_get("email")?,
+            otp_code: row.try_get("otp_code")?,
+            otp_expires_at: row.try_get("otp_expires_at")?,
+            is_verified: row.try_get("is_verified")?,
+            mina_credential_hash: row.try_get("mina_credential_hash")?,
+            board_type: row.try_get("board_type")?,
+            created_at: row.try_get("created_at")?,
+            verified_at: row.try_get("verified_at")?,
+            expires_at: row.try_get("expires_at")?,
         })
     }
 }

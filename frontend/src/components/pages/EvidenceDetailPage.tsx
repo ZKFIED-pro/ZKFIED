@@ -209,7 +209,7 @@ const EvidenceDetailPage: React.FC = () => {
 
                 <div style={{ padding: '12px', border: '1px solid rgb(52, 52, 52)', background: 'rgba(0, 168, 255, 0.02)' }}>
                   <p className="text-gray" style={{ fontSize: '10px', lineHeight: '16px' }}>
-                    Evidence commitment registered on NEAR Protocol blockchain at contract: reg.mrhashfox.testnet
+                    Evidence commitment registered on NEAR Protocol blockchain at contract: zkfied-evidence.reg.mrhashfox.testnet
                   </p>
                 </div>
               </div>

@@ -145,7 +145,7 @@ class ZKFIEDApi {
   private baseURL: string
 
   constructor() {
-    this.baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+    this.baseURL = import.meta.env.VITE_API_URL || 'https://zkfied-frost-testnet.fly.dev'
   }
 
   private async request<T>(

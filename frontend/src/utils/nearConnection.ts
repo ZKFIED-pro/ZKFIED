@@ -14,7 +14,7 @@ const getConfig = () => {
     helperUrl: `https://helper.${network}.near.org`,
     explorerUrl: `https://explorer.${network}.near.org`,
     // Contract addresses
-    registryContractId: import.meta.env.VITE_NEAR_REGISTRY_CONTRACT || 'reg.mrhashfox.testnet',
+    registryContractId: import.meta.env.VITE_NEAR_REGISTRY_CONTRACT || 'zkfied-evidence.reg.mrhashfox.testnet',
     indexerContractId: import.meta.env.VITE_NEAR_INDEXER_CONTRACT || 'idx.mrhashfox.testnet',
     tippingContractId: import.meta.env.VITE_NEAR_TIPPING_CONTRACT || 'tip.mrhashfox.testnet',
     aiAgentsContractId: import.meta.env.VITE_NEAR_AI_AGENTS_CONTRACT || 'ai.mrhashfox.testnet',
@@ -55,13 +55,17 @@ export const getEvidenceRegistryContract = (wallet: WalletConnection, contractId
       viewMethods: [
         'get_evidence',
         'get_total_evidences',
-        'query_evidences_by_board',
+        'get_evidences_by_board',
+        'get_board_evidence_count',
         'verify_evidence_commitment',
-        'get_evidence_verifications',
+        'get_verifications',
+        'search_by_zcash_txid',
+        'get_board_members',
       ],
       changeMethods: [
         'register_evidence',
         'submit_verification',
+        'add_board_member',
       ],
       useLocalViewExecution: false,
     }

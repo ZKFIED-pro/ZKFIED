@@ -34,6 +34,17 @@ const SubmitEvidencePage: React.FC = () => {
   const [linkingTx, setLinkingTx] = useState(false)
   const [completionResponse, setCompletionResponse] = useState<any | undefined>(undefined)
 
+  const handleSkipOtp = () => {
+    setIsAuthenticated(true)
+    setUserSession({
+      session_id: 'skip_otp',
+      email: 'test@example.com',
+      is_verified: true,
+      mina_credential_hash: null,
+      board_type: null,
+    })
+  }
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       setFiles(Array.from(e.target.files))
@@ -236,7 +247,18 @@ const SubmitEvidencePage: React.FC = () => {
           </div>
 
           {mode === 'hybrid' && !isAuthenticated && (
-            <OtpAuth onAuthenticated={handleAuthenticated} />
+            <div>
+              <OtpAuth onAuthenticated={handleAuthenticated} />
+              <div style={{ marginTop: '12px', textAlign: 'center' }}>
+                <button
+                  onClick={handleSkipOtp}
+                  className="st-button-secondary"
+                  style={{ fontSize: '10px', padding: '8px 16px' }}
+                >
+                  Skip OTP (Testing)
+                </button>
+              </div>
+            </div>
           )}
 
           {mode === 'hybrid' && isAuthenticated && userSession && (

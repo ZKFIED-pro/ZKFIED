@@ -56,7 +56,7 @@ EXPOSE 8080
 
 VOLUME ["/data"]
 
-RUN echo '#!/bin/bash\nset -e\nipfs daemon --offline --no-gateway &\nIPFS_PID=$!\nsleep 3\nexec /app/zkfied-frost-coordinator' > /app/entrypoint.sh && \
+RUN echo '#!/bin/bash\nset -e\nipfs daemon &\nIPFS_PID=$!\nsleep 5\nexec /app/zkfied-frost-coordinator' > /app/entrypoint.sh && \
     chmod +x /app/entrypoint.sh
 
 CMD ["/app/entrypoint.sh"]

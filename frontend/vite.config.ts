@@ -12,12 +12,21 @@ export default defineConfig({
       '@/utils': resolve(__dirname, 'src/utils'),
       '@/types': resolve(__dirname, 'src/types'),
       '@/stores': resolve(__dirname, 'src/stores'),
-      '@/context': resolve(__dirname, 'src/context')
+      '@/context': resolve(__dirname, 'src/context'),
+      'buffer': 'buffer/'
     }
   },
   define: {
     'global': 'globalThis',
-    'process.env': {}
+    'process.env': {},
+    'Buffer': ['buffer', 'Buffer']
+  },
+  optimizeDeps: {
+    esbuildOptions: {
+      define: {
+        global: 'globalThis'
+      }
+    }
   },
   server: {
     port: 5173,

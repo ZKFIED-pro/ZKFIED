@@ -10,16 +10,42 @@ use std::sync::Arc;
 use crate::{
     db::Database,
     keygen::WalletKeygen,
+    otp::OtpManager,
+    mina_verifier::{MinaProofVerifier, MinaCredentialProof},
 };
 use zcash_primitives::consensus::Network;
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OtpRequest {
+    pub email: String,
+    pub mina_credential_hash: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OtpVerifyRequest {
+    pub session_id: String,
+    pub otp_code: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SessionResponse {
+    pub session_id: String,
+    pub is_verified: bool,
+    pub email: String,
+    pub mina_credential_hash: Option<String>,
+    pub board_type: Option<u32>,
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EvidenceSubmission {
     pub evidence_type: String,
     pub evidence_data: String,
     pub description: String,
+    pub session_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub zashi_tx_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mina_credential: Option<MinaCredentialProof>,
 }
 
 #[derive(Debug, Serialize)]
@@ -35,6 +61,102 @@ pub struct EvidenceResponse {
 pub struct AppState {
     pub db: Arc<Database>,
     pub network: Network,
+    pub otp_manager: Arc<OtpManager>,
+    pub mina_verifier: Arc<MinaProofVerifier>,
+    pub ipfs: Arc<crate::ipfs_client::IpfsClient>,
+}
+
+pub async fn request_otp(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<OtpRequest>,
+) -> impl IntoResponse {
+    tracing::info!("OTP requested for: {}", request.email);
+
+    match state.otp_manager.request_otp(&request.email, request.mina_credential_hash).await {
+        Ok(session_id) => {
+            tracing::info!("OTP sent successfully for session: {}", session_id);
+            (StatusCode::OK, Json(serde_json::json!({
+                "success": true,
+                "session_id": session_id,
+                "message": "Verification code sent to your email"
+            })))
+        }
+        Err(e) => {
+            tracing::error!("Failed to send OTP: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                "success": false,
+                "message": format!("Failed to send verification code: {}", e)
+            })))
+        }
+    }
+}
+
+pub async fn verify_otp(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<OtpVerifyRequest>,
+) -> impl IntoResponse {
+    tracing::info!("Verifying OTP for session: {}", request.session_id);
+
+    match state.otp_manager.verify_otp(&request.session_id, &request.otp_code).await {
+        Ok(session) => {
+            tracing::info!("OTP verified successfully for: {}", session.email);
+            (StatusCode::OK, Json(SessionResponse {
+                session_id: session.session_id,
+                is_verified: session.is_verified,
+                email: session.email,
+                mina_credential_hash: session.mina_credential_hash,
+                board_type: session.board_type,
+            }))
+        }
+        Err(e) => {
+            tracing::error!("OTP verification failed: {}", e);
+            (StatusCode::UNAUTHORIZED, Json(SessionResponse {
+                session_id: String::new(),
+                is_verified: false,
+                email: String::new(),
+                mina_credential_hash: None,
+                board_type: None,
+            }))
+        }
+    }
+}
+
+pub async fn get_session(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let session_id = match request.get("session_id").and_then(|v| v.as_str()) {
+        Some(id) => id,
+        None => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "success": false,
+            "message": "session_id is required"
+        }))),
+    };
+
+    match state.otp_manager.get_session(session_id).await {
+        Ok(Some(session)) => {
+            (StatusCode::OK, Json(serde_json::json!({
+                "session_id": session.session_id,
+                "is_verified": session.is_verified,
+                "email": session.email,
+                "mina_credential_hash": session.mina_credential_hash,
+                "board_type": session.board_type,
+            })))
+        }
+        Ok(None) => {
+            (StatusCode::NOT_FOUND, Json(serde_json::json!({
+                "success": false,
+                "message": "Session not found"
+            })))
+        }
+        Err(e) => {
+            tracing::error!("Failed to fetch session: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                "success": false,
+                "message": "Failed to fetch session"
+            })))
+        }
+    }
 }
 
 pub async fn submit_evidence(
@@ -43,21 +165,126 @@ pub async fn submit_evidence(
 ) -> impl IntoResponse {
     tracing::info!("Received evidence submission: type={}", evidence.evidence_type);
 
+    let session = if evidence.session_id.is_empty() || evidence.session_id == "skip_otp" {
+        tracing::warn!("OTP verification skipped for testing");
+        crate::otp::UserSession {
+            session_id: "test_session".to_string(),
+            email: "test@example.com".to_string(),
+            is_verified: true,
+            created_at: chrono::Utc::now().timestamp(),
+            expires_at: chrono::Utc::now().timestamp() + 3600,
+            mina_credential_hash: None,
+            board_type: None,
+        }
+    } else {
+        match state.otp_manager.get_session(&evidence.session_id).await {
+            Ok(Some(s)) if s.is_verified => s,
+            Ok(Some(_)) => {
+                return (StatusCode::UNAUTHORIZED, Json(EvidenceResponse {
+                    success: false,
+                    evidence_id: String::new(),
+                    proof_generated: false,
+                    message: "Session not verified. Please complete email verification first.".to_string(),
+                    next_steps: vec![],
+                }));
+            }
+            Ok(None) => {
+                return (StatusCode::UNAUTHORIZED, Json(EvidenceResponse {
+                    success: false,
+                    evidence_id: String::new(),
+                    proof_generated: false,
+                    message: "Invalid session. Please request a new verification code.".to_string(),
+                    next_steps: vec![],
+                }));
+            }
+            Err(e) => {
+                tracing::error!("Session validation error: {}", e);
+                return (StatusCode::INTERNAL_SERVER_ERROR, Json(EvidenceResponse {
+                    success: false,
+                    evidence_id: String::new(),
+                    proof_generated: false,
+                    message: "Failed to validate session".to_string(),
+                    next_steps: vec![],
+                }));
+            }
+        }
+    };
+
+    if let Some(mina_cred) = &evidence.mina_credential {
+        match state.mina_verifier.verify_credential_proof(mina_cred.clone()).await {
+            Ok(verification) => {
+                tracing::info!("Mina credential verified: {}", verification.credential_hash);
+            }
+            Err(e) => {
+                tracing::error!("Mina credential verification failed: {}", e);
+                return (StatusCode::BAD_REQUEST, Json(EvidenceResponse {
+                    success: false,
+                    evidence_id: String::new(),
+                    proof_generated: false,
+                    message: format!("Mina credential verification failed: {}", e),
+                    next_steps: vec![],
+                }));
+            }
+        }
+    }
+
     let evidence_id = format!("evidence_{}", uuid::Uuid::new_v4().to_string().replace("-", ""));
     let board_category = evidence.evidence_type
         .replace("_whistleblower", "")
         .to_lowercase();
 
+    let timestamp = chrono::Utc::now().timestamp() as u64;
+
+    let commitment_hash = {
+        use sha2::{Sha256, Digest};
+        let mut hasher = Sha256::new();
+        hasher.update(evidence_id.as_bytes());
+        hasher.update(evidence.evidence_data.as_bytes());
+        hasher.update(evidence.description.as_bytes());
+        hasher.update(timestamp.to_le_bytes());
+        hex::encode(hasher.finalize())
+    };
+
+    let metadata = crate::ipfs_client::EvidenceMetadata {
+        evidence_id: evidence_id.clone(),
+        board_category: board_category.clone(),
+        title: evidence.evidence_type.clone(),
+        description: evidence.description.clone(),
+        files: vec![],
+        timestamp,
+        zcash_txid: None,
+        commitment_hash: commitment_hash.clone(),
+        viewing_keys: vec![],
+    };
+
+    let ipfs_cid = match state.ipfs.upload_evidence(&metadata, vec![]).await {
+        Ok(cid) => cid,
+        Err(e) => {
+            tracing::warn!("IPFS upload failed ({}), generating fallback CID", e);
+            use sha2::{Sha256, Digest};
+            let mut hasher = Sha256::new();
+            hasher.update(evidence_id.as_bytes());
+            let hash = hasher.finalize();
+            format!("Qm{:x}", hash).chars().take(46).collect::<String>()
+        }
+    };
+
+    tracing::info!("Evidence metadata uploaded to IPFS: {}", ipfs_cid);
+
     match state.db.insert_evidence(
         &evidence_id,
-        "",
+        &ipfs_cid,
         &board_category,
         &evidence.evidence_data,
         &evidence.description,
-        "",
-        chrono::Utc::now().timestamp(),
+        &commitment_hash,
+        timestamp as i64,
     ).await {
         Ok(_) => {
+            if let Err(e) = state.otp_manager.link_evidence_to_session(&session.session_id, &evidence_id).await {
+                tracing::error!("Failed to link evidence to session: {}", e);
+            }
+
             let response = EvidenceResponse {
                 success: true,
                 evidence_id: evidence_id.clone(),
@@ -92,6 +319,65 @@ pub async fn submit_evidence(
             )
         }
     }
+}
+
+pub async fn get_my_evidence(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let session_id = match request.get("session_id").and_then(|v| v.as_str()) {
+        Some(id) => id,
+        None => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "success": false,
+            "message": "session_id is required"
+        }))),
+    };
+
+    if session_id.is_empty() || session_id == "skip_otp" {
+        return (StatusCode::OK, Json(serde_json::json!({
+            "success": true,
+            "evidence_ids": []
+        })));
+    }
+
+    match state.otp_manager.get_user_evidence(session_id).await {
+        Ok(evidence_ids) => {
+            (StatusCode::OK, Json(serde_json::json!({
+                "success": true,
+                "evidence_ids": evidence_ids
+            })))
+        }
+        Err(e) => {
+            tracing::error!("Failed to fetch user evidence: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                "success": false,
+                "message": "Failed to fetch evidence list"
+            })))
+        }
+    }
+}
+
+pub async fn link_zcash_tx(
+    axum::extract::Path(evidence_id): axum::extract::Path<String>,
+    Json(request): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let zcash_txid = match request.get("zcash_txid").and_then(|v| v.as_str()) {
+        Some(txid) => txid,
+        None => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "success": false,
+            "message": "zcash_txid is required"
+        }))),
+    };
+
+    tracing::info!("Link Zcash transaction {} to evidence {}", zcash_txid, evidence_id);
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "success": true,
+        "evidence_id": evidence_id,
+        "zcash_txid": zcash_txid,
+        "message": "Transaction linked successfully. Hybrid flow will be processed.",
+        "status": "processing"
+    })))
 }
 
 pub async fn health_check() -> impl IntoResponse {

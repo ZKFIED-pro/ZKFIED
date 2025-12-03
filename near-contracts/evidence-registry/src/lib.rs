@@ -24,6 +24,7 @@ pub struct EvidenceRecord {
     pub registered_by: AccountId,
     pub registered_at: u64,
     pub status: EvidenceStatus,
+    pub registration_type: RegistrationType,
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
@@ -40,6 +41,13 @@ pub enum EvidenceStatus {
     Pending,
     Verified,
     Rejected,
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(crate = "near_sdk::serde")]
+pub enum RegistrationType {
+    FullFrost,
+    Lightweight,
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
@@ -84,15 +92,21 @@ impl EvidenceRegistry {
         zcash_txid: String,
         zcash_block_height: u64,
         frost_signatures: Vec<FrostSignature>,
+        registration_type: RegistrationType,
     ) {
         assert!(
             commitment_hash.len() == 32,
             "Invalid commitment hash length"
         );
 
+        let min_sigs = match registration_type {
+            RegistrationType::FullFrost => 3,
+            RegistrationType::Lightweight => 1,
+        };
+
         assert!(
-            frost_signatures.len() >= 3,
-            "Minimum 3 FROST signatures required"
+            frost_signatures.len() >= min_sigs,
+            "Insufficient FROST signatures"
         );
 
         assert!(
@@ -111,6 +125,7 @@ impl EvidenceRegistry {
             registered_by: env::predecessor_account_id(),
             registered_at: env::block_timestamp(),
             status: EvidenceStatus::Pending,
+            registration_type,
         };
 
         self.evidences.insert(&evidence_id, &record);
@@ -316,6 +331,7 @@ mod tests {
             "zcash-txid-123".to_string(),
             100000,
             frost_sigs,
+            RegistrationType::FullFrost,
         );
 
         let evidence = contract.get_evidence("evidence-001".to_string());
@@ -362,6 +378,7 @@ mod tests {
             "zcash-txid-456".to_string(),
             200000,
             frost_sigs,
+            RegistrationType::FullFrost,
         );
 
         assert!(contract.verify_evidence_commitment(

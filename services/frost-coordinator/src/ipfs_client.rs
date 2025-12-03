@@ -47,25 +47,36 @@ struct VersionResponse {
 pub struct IpfsClient {
     base_url: String,
     client: Client,
+    pinata_jwt: Option<String>,
 }
 
 impl IpfsClient {
     pub fn new() -> Result<Self> {
         let base_url = "http://127.0.0.1:5001".to_string();
         let client = Client::new();
+        let pinata_jwt = std::env::var("PINATA_JWT").ok();
 
-        tracing::info!("IPFS client initialized ({})", base_url);
+        if pinata_jwt.is_some() {
+            tracing::info!("IPFS client initialized with Pinata");
+        } else {
+            tracing::info!("IPFS client initialized ({})", base_url);
+        }
 
-        Ok(Self { base_url, client })
+        Ok(Self { base_url, client, pinata_jwt })
     }
 
     pub fn with_uri(uri: &str) -> Result<Self> {
         let base_url = uri.trim_end_matches('/').to_string();
         let client = Client::new();
+        let pinata_jwt = std::env::var("PINATA_JWT").ok();
 
-        tracing::info!("IPFS client initialized ({})", base_url);
+        if pinata_jwt.is_some() {
+            tracing::info!("IPFS client initialized with Pinata");
+        } else {
+            tracing::info!("IPFS client initialized ({})", base_url);
+        }
 
-        Ok(Self { base_url, client })
+        Ok(Self { base_url, client, pinata_jwt })
     }
 
     pub async fn upload_evidence(
@@ -102,6 +113,10 @@ impl IpfsClient {
         filename: &str,
         data: Vec<u8>,
     ) -> Result<String> {
+        if let Some(jwt) = &self.pinata_jwt {
+            return self.upload_to_pinata(filename, data, jwt).await;
+        }
+
         let size = data.len();
 
         tracing::debug!("Uploading file '{}' ({} bytes) to IPFS", filename, size);
@@ -127,6 +142,36 @@ impl IpfsClient {
         let cid = response.hash;
 
         tracing::info!("File '{}' uploaded to IPFS: {}", filename, cid);
+
+        Ok(cid)
+    }
+
+    async fn upload_to_pinata(&self, filename: &str, data: Vec<u8>, jwt: &str) -> Result<String> {
+        tracing::info!("Uploading '{}' to Pinata", filename);
+
+        let part = multipart::Part::bytes(data)
+            .file_name(filename.to_string());
+
+        let form = multipart::Form::new()
+            .part("file", part);
+
+        let response = self.client
+            .post("https://api.pinata.cloud/pinning/pinFileToIPFS")
+            .header("Authorization", format!("Bearer {}", jwt))
+            .multipart(form)
+            .send()
+            .await
+            .context("Failed to upload to Pinata")?;
+
+        let json: serde_json::Value = response.json().await
+            .context("Failed to parse Pinata response")?;
+
+        let cid = json["IpfsHash"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("Missing IpfsHash in Pinata response"))?
+            .to_string();
+
+        tracing::info!("File '{}' uploaded to Pinata: {}", filename, cid);
 
         Ok(cid)
     }

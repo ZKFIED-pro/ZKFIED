@@ -151,9 +151,32 @@ impl NearTransactionManager {
         zcash_block_height: u64,
         frost_signatures: Vec<FrostSignature>,
     ) -> Result<String> {
+        self.register_evidence_hybrid(
+            evidence_id,
+            ipfs_cid,
+            board_id,
+            commitment_hash,
+            zcash_txid,
+            zcash_block_height,
+            frost_signatures,
+            "FullFrost".to_string(),
+        ).await
+    }
+
+    pub async fn register_evidence_hybrid(
+        &self,
+        evidence_id: String,
+        ipfs_cid: String,
+        board_id: String,
+        commitment_hash: Vec<u8>,
+        zcash_txid: String,
+        zcash_block_height: u64,
+        frost_signatures: Vec<FrostSignature>,
+        registration_type: String,
+    ) -> Result<String> {
         let account = self.ensure_account().await?;
 
-        tracing::info!("Registering evidence {} on NEAR contract", evidence_id);
+        tracing::info!("Registering evidence {} on NEAR contract ({})", evidence_id, registration_type);
 
         let args = serde_json::json!({
             "evidence_id": evidence_id,
@@ -163,6 +186,7 @@ impl NearTransactionManager {
             "zcash_txid": zcash_txid,
             "zcash_block_height": zcash_block_height,
             "frost_signatures": frost_signatures,
+            "registration_type": registration_type,
         });
 
         let args_json = serde_json::to_vec(&args)?;
@@ -180,7 +204,7 @@ impl NearTransactionManager {
                 method_name: "register_evidence".to_string(),
                 args: args_json,
                 gas: 100_000_000_000_000,
-                deposit: 100_000_000_000_000_000_000_000, // 0.1 NEAR
+                deposit: 100_000_000_000_000_000_000_000,
             }))],
         });
 
@@ -211,7 +235,7 @@ impl NearTransactionManager {
             "register_evidence",
         ).await?;
 
-        tracing::info!("Evidence registered on NEAR: tx_hash={}", tx_hash_str);
+        tracing::info!("Evidence registered on NEAR ({}): tx_hash={}", registration_type, tx_hash_str);
 
         Ok(tx_hash_str)
     }

@@ -17,6 +17,7 @@
     "@near-wallet-selector/modal-ui": "^8.10.2",
     "@near-wallet-selector/my-near-wallet": "^8.10.2",
     "axios": "^1.6.0",
+    "buffer": "^6.0.3",
     "clsx": "^2.0.0",
     "dither": "^0.1.0",
     "framer-motion": "^10.16.0",

@@ -123,7 +123,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Sapling parameters verified and ready");
 
     let near_contract_id = std::env::var("NEAR_CONTRACT_ID")
-        .unwrap_or_else(|_| "registry.mrhashfox.testnet".to_string())
+        .unwrap_or_else(|_| "zkfied-evidence.reg.mrhashfox.testnet".to_string())
         .parse()
         .expect("Invalid NEAR contract ID");
 
@@ -202,9 +202,22 @@ async fn main() -> anyhow::Result<()> {
     };
     tracing::info!("Using Zcash network: {:?}", network);
 
+    let resend_api_key = std::env::var("RESEND_API_KEY")
+        .unwrap_or_else(|_| "re_PyJTCJRZ_KurHiSo5MjzcqYVV4ycZRbLR".to_string());
+
+    let otp_manager = Arc::new(zkfied_frost_coordinator::otp::OtpManager::new(
+        db.clone(),
+        resend_api_key,
+    ));
+
+    tracing::info!("OTP manager initialized");
+
     let api_state = Arc::new(AppState {
         db: db.clone(),
         network,
+        otp_manager,
+        mina_verifier: mina_verifier.clone(),
+        ipfs: ipfs.clone(),
     });
 
     let frost_router = Router::new()
@@ -225,7 +238,11 @@ async fn main() -> anyhow::Result<()> {
         .with_state(orchestrator);
 
     let hybrid_router = Router::new()
+        .route("/api/auth/request-otp", post(api_routes::request_otp))
+        .route("/api/auth/verify-otp", post(api_routes::verify_otp))
+        .route("/api/auth/session", post(api_routes::get_session))
         .route("/api/evidence/submit", post(api_routes::submit_evidence))
+        .route("/api/evidence/my-evidence", post(api_routes::get_my_evidence))
         .route("/api/wallet/address", get(api_routes::get_wallet_address))
         .route("/api/stats", get(api_routes::get_stats))
         .with_state(api_state);
