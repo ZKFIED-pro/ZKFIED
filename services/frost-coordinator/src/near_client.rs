@@ -61,8 +61,57 @@ impl NearAccount {
     }
 }
 
+pub struct RpcClientPool {
+    clients: Vec<JsonRpcClient>,
+    current_index: Arc<RwLock<usize>>,
+}
+
+impl RpcClientPool {
+    fn new(urls: Vec<String>) -> Self {
+        let clients = urls.iter().map(|url| JsonRpcClient::connect(url.as_str())).collect();
+        tracing::info!("RPC client pool initialized with URLs: {:?}", urls);
+        Self {
+            clients,
+            current_index: Arc::new(RwLock::new(0)),
+        }
+    }
+
+    async fn get_client(&self) -> JsonRpcClient {
+        let index = *self.current_index.read().await;
+        self.clients[index].clone()
+    }
+
+    async fn rotate_to_next(&self) {
+        let mut index = self.current_index.write().await;
+        *index = (*index + 1) % self.clients.len();
+        tracing::warn!("Rotating to next NEAR RPC provider (index: {})", *index);
+    }
+
+    async fn try_with_fallback<F, T, Fut>(&self, operation: F) -> Result<T>
+    where
+        F: Fn(JsonRpcClient) -> Fut,
+        Fut: std::future::Future<Output = Result<T>>,
+    {
+        let mut last_error = None;
+
+        for attempt in 0..self.clients.len() {
+            let client = self.get_client().await;
+            match operation(client).await {
+                Ok(result) => return Ok(result),
+                Err(e) => {
+                    tracing::warn!("RPC call failed on attempt {}: {:?}", attempt + 1, e);
+                    last_error = Some(e);
+                    self.rotate_to_next().await;
+                }
+            }
+        }
+
+        Err(last_error.unwrap_or_else(|| anyhow::anyhow!("All RPC providers failed")))
+    }
+}
+
 pub struct NearTransactionManager {
-    client: JsonRpcClient,
+    client_pool: RpcClientPool,
     contract_account_id: AccountId,
     account: Arc<RwLock<Option<NearAccount>>>,
     db: Arc<Database>,
@@ -76,11 +125,56 @@ pub enum NearNetwork {
 }
 
 impl NearNetwork {
-    pub fn rpc_url(&self) -> &str {
+    pub fn rpc_urls(&self) -> Vec<String> {
+        let custom_rpc = std::env::var("NEAR_RPC_URL").ok();
+
         match self {
-            NearNetwork::Testnet => "https://rpc.testnet.near.org",
-            NearNetwork::Mainnet => "https://rpc.mainnet.near.org",
+            NearNetwork::Testnet => {
+                let mut urls = vec![];
+
+                // Use custom RPC if provided, otherwise use AllThatNode with API key
+                if let Some(url) = custom_rpc {
+                    urls.push(url);
+                } else {
+                    urls.push("https://near-testnet.g.allthatnode.com/archive/json_rpc/179afefe6b634860b881b58eb3cd390b".to_string());
+                }
+
+                // Fallback URLs
+                urls.extend(vec![
+                    "https://rpc.testnet.near.org".to_string(),
+                    "https://near-testnet.api.pagoda.co/rpc/v1/".to_string(),
+                    "https://endpoints.omniatech.io/v1/near/testnet/public".to_string(),
+                    "https://near-testnet-rpc.allthatnode.com:3030".to_string(),
+                    "https://public-rpc.blockpi.io/http/near-testnet".to_string(),
+                ]);
+
+                urls
+            },
+            NearNetwork::Mainnet => {
+                let mut urls = vec![];
+
+                if let Some(url) = custom_rpc {
+                    urls.push(url);
+                } else {
+                    urls.push("https://rpc.mainnet.near.org".to_string());
+                }
+
+                // Fallback URLs
+                urls.extend(vec![
+                    "https://near-mainnet.api.pagoda.co/rpc/v1/".to_string(),
+                    "https://endpoints.omniatech.io/v1/near/mainnet/public".to_string(),
+                    "https://near-mainnet-rpc.allthatnode.com:3030".to_string(),
+                    "https://public-rpc.blockpi.io/http/near".to_string(),
+                    "https://1rpc.io/near".to_string(),
+                ]);
+
+                urls
+            },
         }
+    }
+
+    pub fn rpc_url(&self) -> String {
+        self.rpc_urls()[0].clone()
     }
 }
 
@@ -90,9 +184,10 @@ impl NearTransactionManager {
         network: NearNetwork,
         db: Arc<Database>,
     ) -> Self {
-        let client = JsonRpcClient::connect(network.rpc_url());
+        let client_pool = RpcClientPool::new(network.rpc_urls());
+        tracing::info!("Initialized NEAR RPC client pool with {} providers", network.rpc_urls().len());
         Self {
-            client,
+            client_pool,
             contract_account_id,
             account: Arc::new(RwLock::new(None)),
             db,
@@ -121,7 +216,7 @@ impl NearTransactionManager {
             },
         };
 
-        let response = self.client.call(request).await
+        let response = self.client_pool.get_client().await.call(request).await
             .context("Failed to query access key")?;
 
         match response.kind {
@@ -135,7 +230,7 @@ impl NearTransactionManager {
             block_reference: BlockReference::Finality(Finality::Final),
         };
 
-        let response = self.client.call(request).await
+        let response = self.client_pool.get_client().await.call(request).await
             .context("Failed to get latest block")?;
 
         Ok(response.header.hash)
@@ -215,7 +310,7 @@ impl NearTransactionManager {
             signed_transaction: signed_tx,
         };
 
-        let response = self.client.call(request).await
+        let response = self.client_pool.get_client().await.call(request).await
             .map_err(|e| {
                 tracing::error!("NEAR RPC error details: {:?}", e);
                 anyhow::anyhow!("Failed to broadcast NEAR transaction: {:?}", e)
@@ -256,7 +351,7 @@ impl NearTransactionManager {
             },
         };
 
-        let response = self.client.call(request).await
+        let response = self.client_pool.get_client().await.call(request).await
             .context("Failed to query NEAR contract")?;
 
         match response.kind {
@@ -295,7 +390,7 @@ impl NearTransactionManager {
             },
         };
 
-        let response = self.client.call(request).await
+        let response = self.client_pool.get_client().await.call(request).await
             .context("Failed to query NEAR contract")?;
 
         match response.kind {
@@ -329,7 +424,7 @@ impl NearTransactionManager {
             },
         };
 
-        let response = self.client.call(request).await
+        let response = self.client_pool.get_client().await.call(request).await
             .context("Failed to query NEAR contract")?;
 
         match response.kind {
@@ -358,7 +453,7 @@ impl NearTransactionManager {
             },
         };
 
-        let response = self.client.call(request).await
+        let response = self.client_pool.get_client().await.call(request).await
             .context("Failed to query NEAR contract")?;
 
         match response.kind {
@@ -385,7 +480,7 @@ impl NearTransactionManager {
             wait_until: near_primitives::views::TxExecutionStatus::Final,
         };
 
-        let _response = self.client.call(request).await
+        let _response = self.client_pool.get_client().await.call(request).await
             .context("Failed to get transaction status")?;
 
         self.db.confirm_near_post(tx_hash, 0).await?;
@@ -393,5 +488,404 @@ impl NearTransactionManager {
         tracing::info!("NEAR transaction confirmed: {}", tx_hash);
 
         Ok(())
+    }
+}
+
+// Marketplace-specific client for the marketplace contract
+pub struct NearMarketplaceClient {
+    client_pool: RpcClientPool,
+    marketplace_contract_id: AccountId,
+    account: Arc<RwLock<Option<NearAccount>>>,
+    network: NearNetwork,
+}
+
+impl NearMarketplaceClient {
+    pub fn new(
+        marketplace_contract_id: AccountId,
+        network: NearNetwork,
+    ) -> Self {
+        let client_pool = RpcClientPool::new(network.rpc_urls());
+        tracing::info!("Initialized NEAR Marketplace RPC client pool with {} providers", network.rpc_urls().len());
+        Self {
+            client_pool,
+            marketplace_contract_id,
+            account: Arc::new(RwLock::new(None)),
+            network,
+        }
+    }
+
+    pub async fn initialize_account(&self, account: NearAccount) -> Result<()> {
+        let mut guard = self.account.write().await;
+        *guard = Some(account);
+        tracing::info!("NEAR marketplace account initialized");
+        Ok(())
+    }
+
+    pub async fn ensure_account(&self) -> Result<NearAccount> {
+        let guard = self.account.read().await;
+        guard.clone().ok_or_else(|| anyhow::anyhow!("NEAR account not initialized"))
+    }
+
+    async fn get_access_key_nonce(&self, account_id: &AccountId, public_key: &PublicKey) -> Result<u64> {
+        let request = methods::query::RpcQueryRequest {
+            block_reference: BlockReference::Finality(Finality::Final),
+            request: near_primitives::views::QueryRequest::ViewAccessKey {
+                account_id: account_id.clone(),
+                public_key: public_key.clone(),
+            },
+        };
+
+        let response = self.client_pool.get_client().await.call(request).await
+            .context("Failed to query access key")?;
+
+        match response.kind {
+            QueryResponseKind::AccessKey(access_key) => Ok(access_key.nonce),
+            _ => bail!("Unexpected response kind"),
+        }
+    }
+
+    async fn get_latest_block_hash(&self) -> Result<CryptoHash> {
+        let request = methods::block::RpcBlockRequest {
+            block_reference: BlockReference::Finality(Finality::Final),
+        };
+
+        let response = self.client_pool.get_client().await.call(request).await
+            .context("Failed to get latest block")?;
+
+        Ok(response.header.hash)
+    }
+
+    pub async fn create_verification_request(
+        &self,
+        evidence_id: String,
+        verification_type: String,
+        reward_amount_yocto: u128,
+    ) -> Result<String> {
+        let account = self.ensure_account().await?;
+
+        tracing::info!("Creating verification request for evidence {} on NEAR marketplace", evidence_id);
+
+        let args = serde_json::json!({
+            "evidence_id": evidence_id,
+            "verification_type": verification_type,
+        });
+
+        let args_json = serde_json::to_vec(&args)?;
+
+        let nonce = self.get_access_key_nonce(&account.account_id, &account.public_key()).await?;
+        let block_hash = self.get_latest_block_hash().await?;
+
+        let transaction = Transaction::V0(TransactionV0 {
+            signer_id: account.account_id.clone(),
+            public_key: account.public_key(),
+            nonce: nonce + 1,
+            receiver_id: self.marketplace_contract_id.clone(),
+            block_hash,
+            actions: vec![Action::FunctionCall(Box::new(FunctionCallAction {
+                method_name: "create_verification_request".to_string(),
+                args: args_json,
+                gas: 100_000_000_000_000,
+                deposit: reward_amount_yocto,
+            }))],
+        });
+
+        let signature = account.signer.sign(transaction.get_hash_and_size().0.as_ref());
+        let signed_tx = SignedTransaction::new(signature, transaction);
+
+        let request = methods::broadcast_tx_commit::RpcBroadcastTxCommitRequest {
+            signed_transaction: signed_tx,
+        };
+
+        let response = self.client_pool.get_client().await.call(request).await
+            .map_err(|e| {
+                tracing::error!("NEAR marketplace RPC error: {:?}", e);
+                anyhow::anyhow!("Failed to broadcast marketplace transaction: {:?}", e)
+            })?;
+
+        if let near_primitives::views::FinalExecutionStatus::Failure(failure) = response.status {
+            tracing::error!("NEAR marketplace transaction failed: {:?}", failure);
+            bail!("NEAR marketplace transaction failed: {:?}", failure);
+        }
+
+        // Extract request_id from response
+        let request_id = if let Some(outcome) = response.receipts_outcome.first() {
+            match outcome.outcome.status {
+                near_primitives::views::ExecutionStatusView::SuccessValue(ref bytes) => {
+                    let request_id_str = String::from_utf8_lossy(bytes);
+                    request_id_str.trim_matches('"').to_string()
+                }
+                _ => evidence_id.clone(),
+            }
+        } else {
+            evidence_id.clone()
+        };
+
+        let tx_hash_str = response.transaction.hash.to_string();
+        tracing::info!("Verification request created on NEAR: request_id={}, tx_hash={}", request_id, tx_hash_str);
+
+        Ok(request_id)
+    }
+
+    pub async fn submit_bid(
+        &self,
+        request_id: String,
+        bid_amount_yocto: u128,
+        estimated_completion_timestamp: u64,
+    ) -> Result<String> {
+        let account = self.ensure_account().await?;
+
+        tracing::info!("Submitting bid for request {} on NEAR marketplace", request_id);
+
+        let args = serde_json::json!({
+            "request_id": request_id,
+            "bid_amount": bid_amount_yocto.to_string(),
+            "estimated_completion": estimated_completion_timestamp,
+        });
+
+        let args_json = serde_json::to_vec(&args)?;
+
+        let nonce = self.get_access_key_nonce(&account.account_id, &account.public_key()).await?;
+        let block_hash = self.get_latest_block_hash().await?;
+
+        let transaction = Transaction::V0(TransactionV0 {
+            signer_id: account.account_id.clone(),
+            public_key: account.public_key(),
+            nonce: nonce + 1,
+            receiver_id: self.marketplace_contract_id.clone(),
+            block_hash,
+            actions: vec![Action::FunctionCall(Box::new(FunctionCallAction {
+                method_name: "submit_bid".to_string(),
+                args: args_json,
+                gas: 50_000_000_000_000,
+                deposit: 0,
+            }))],
+        });
+
+        let signature = account.signer.sign(transaction.get_hash_and_size().0.as_ref());
+        let signed_tx = SignedTransaction::new(signature, transaction);
+
+        let request = methods::broadcast_tx_commit::RpcBroadcastTxCommitRequest {
+            signed_transaction: signed_tx,
+        };
+
+        let response = self.client_pool.get_client().await.call(request).await
+            .map_err(|e| {
+                tracing::error!("NEAR marketplace bid RPC error: {:?}", e);
+                anyhow::anyhow!("Failed to submit bid: {:?}", e)
+            })?;
+
+        if let near_primitives::views::FinalExecutionStatus::Failure(failure) = response.status {
+            tracing::error!("NEAR marketplace bid transaction failed: {:?}", failure);
+            bail!("Bid submission failed: {:?}", failure);
+        }
+
+        let tx_hash_str = response.transaction.hash.to_string();
+        tracing::info!("Bid submitted on NEAR: tx_hash={}", tx_hash_str);
+
+        Ok(tx_hash_str)
+    }
+
+    pub async fn accept_bid(
+        &self,
+        request_id: String,
+        solver_account_id: String,
+    ) -> Result<String> {
+        let account = self.ensure_account().await?;
+
+        tracing::info!("Accepting bid for request {} from solver {}", request_id, solver_account_id);
+
+        let args = serde_json::json!({
+            "request_id": request_id,
+            "solver": solver_account_id,
+        });
+
+        let args_json = serde_json::to_vec(&args)?;
+
+        let nonce = self.get_access_key_nonce(&account.account_id, &account.public_key()).await?;
+        let block_hash = self.get_latest_block_hash().await?;
+
+        let transaction = Transaction::V0(TransactionV0 {
+            signer_id: account.account_id.clone(),
+            public_key: account.public_key(),
+            nonce: nonce + 1,
+            receiver_id: self.marketplace_contract_id.clone(),
+            block_hash,
+            actions: vec![Action::FunctionCall(Box::new(FunctionCallAction {
+                method_name: "accept_bid".to_string(),
+                args: args_json,
+                gas: 50_000_000_000_000,
+                deposit: 0,
+            }))],
+        });
+
+        let signature = account.signer.sign(transaction.get_hash_and_size().0.as_ref());
+        let signed_tx = SignedTransaction::new(signature, transaction);
+
+        let request = methods::broadcast_tx_commit::RpcBroadcastTxCommitRequest {
+            signed_transaction: signed_tx,
+        };
+
+        let response = self.client_pool.get_client().await.call(request).await
+            .map_err(|e| {
+                tracing::error!("NEAR marketplace accept bid RPC error: {:?}", e);
+                anyhow::anyhow!("Failed to accept bid: {:?}", e)
+            })?;
+
+        if let near_primitives::views::FinalExecutionStatus::Failure(failure) = response.status {
+            tracing::error!("NEAR marketplace accept bid failed: {:?}", failure);
+            bail!("Accept bid failed: {:?}", failure);
+        }
+
+        let tx_hash_str = response.transaction.hash.to_string();
+        tracing::info!("Bid accepted on NEAR: tx_hash={}", tx_hash_str);
+
+        Ok(tx_hash_str)
+    }
+
+    pub async fn submit_verification(
+        &self,
+        request_id: String,
+        proof_cid: String,
+    ) -> Result<String> {
+        let account = self.ensure_account().await?;
+
+        tracing::info!("Submitting verification for request {}", request_id);
+
+        let args = serde_json::json!({
+            "request_id": request_id,
+            "proof_cid": proof_cid,
+        });
+
+        let args_json = serde_json::to_vec(&args)?;
+
+        let nonce = self.get_access_key_nonce(&account.account_id, &account.public_key()).await?;
+        let block_hash = self.get_latest_block_hash().await?;
+
+        let transaction = Transaction::V0(TransactionV0 {
+            signer_id: account.account_id.clone(),
+            public_key: account.public_key(),
+            nonce: nonce + 1,
+            receiver_id: self.marketplace_contract_id.clone(),
+            block_hash,
+            actions: vec![Action::FunctionCall(Box::new(FunctionCallAction {
+                method_name: "submit_verification".to_string(),
+                args: args_json,
+                gas: 100_000_000_000_000,
+                deposit: 0,
+            }))],
+        });
+
+        let signature = account.signer.sign(transaction.get_hash_and_size().0.as_ref());
+        let signed_tx = SignedTransaction::new(signature, transaction);
+
+        let request = methods::broadcast_tx_commit::RpcBroadcastTxCommitRequest {
+            signed_transaction: signed_tx,
+        };
+
+        let response = self.client_pool.get_client().await.call(request).await
+            .map_err(|e| {
+                tracing::error!("NEAR marketplace verification RPC error: {:?}", e);
+                anyhow::anyhow!("Failed to submit verification: {:?}", e)
+            })?;
+
+        if let near_primitives::views::FinalExecutionStatus::Failure(failure) = response.status {
+            tracing::error!("NEAR marketplace verification failed: {:?}", failure);
+            bail!("Verification submission failed: {:?}", failure);
+        }
+
+        let tx_hash_str = response.transaction.hash.to_string();
+        tracing::info!("Verification submitted on NEAR, escrow released: tx_hash={}", tx_hash_str);
+
+        Ok(tx_hash_str)
+    }
+
+    pub async fn get_request(&self, request_id: String) -> Result<Option<serde_json::Value>> {
+        let args = serde_json::json!({
+            "request_id": request_id
+        });
+
+        let args_json = serde_json::to_vec(&args)?;
+
+        let request = methods::query::RpcQueryRequest {
+            block_reference: BlockReference::Finality(Finality::Final),
+            request: near_primitives::views::QueryRequest::CallFunction {
+                account_id: self.marketplace_contract_id.clone(),
+                method_name: "get_request".to_string(),
+                args: args_json.into(),
+            },
+        };
+
+        let response = self.client_pool.get_client().await.call(request).await
+            .context("Failed to query marketplace contract")?;
+
+        match response.kind {
+            QueryResponseKind::CallResult(result) => {
+                if result.result.is_empty() {
+                    return Ok(None);
+                }
+                let request_data: Option<serde_json::Value> = serde_json::from_slice(&result.result)
+                    .context("Failed to parse request")?;
+                Ok(request_data)
+            }
+            _ => bail!("Unexpected response kind"),
+        }
+    }
+
+    pub async fn get_bids(&self, request_id: String) -> Result<Vec<serde_json::Value>> {
+        let args = serde_json::json!({
+            "request_id": request_id
+        });
+
+        let args_json = serde_json::to_vec(&args)?;
+
+        let request = methods::query::RpcQueryRequest {
+            block_reference: BlockReference::Finality(Finality::Final),
+            request: near_primitives::views::QueryRequest::CallFunction {
+                account_id: self.marketplace_contract_id.clone(),
+                method_name: "get_bids".to_string(),
+                args: args_json.into(),
+            },
+        };
+
+        let response = self.client_pool.get_client().await.call(request).await
+            .context("Failed to query marketplace bids")?;
+
+        match response.kind {
+            QueryResponseKind::CallResult(result) => {
+                let bids: Vec<serde_json::Value> = serde_json::from_slice(&result.result)
+                    .context("Failed to parse bids")?;
+                Ok(bids)
+            }
+            _ => bail!("Unexpected response kind"),
+        }
+    }
+
+    pub async fn get_escrow_balance(&self, request_id: String) -> Result<String> {
+        let args = serde_json::json!({
+            "request_id": request_id
+        });
+
+        let args_json = serde_json::to_vec(&args)?;
+
+        let request = methods::query::RpcQueryRequest {
+            block_reference: BlockReference::Finality(Finality::Final),
+            request: near_primitives::views::QueryRequest::CallFunction {
+                account_id: self.marketplace_contract_id.clone(),
+                method_name: "get_escrow_balance".to_string(),
+                args: args_json.into(),
+            },
+        };
+
+        let response = self.client_pool.get_client().await.call(request).await
+            .context("Failed to query escrow balance")?;
+
+        match response.kind {
+            QueryResponseKind::CallResult(result) => {
+                let balance: String = serde_json::from_slice(&result.result)
+                    .context("Failed to parse escrow balance")?;
+                Ok(balance)
+            }
+            _ => bail!("Unexpected response kind"),
+        }
     }
 }

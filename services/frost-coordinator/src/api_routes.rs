@@ -12,6 +12,7 @@ use crate::{
     keygen::WalletKeygen,
     otp::OtpManager,
     mina_verifier::{MinaProofVerifier, MinaCredentialProof},
+    encryption::EvidenceEncryption,
 };
 use zcash_primitives::consensus::Network;
 
@@ -55,6 +56,7 @@ pub struct EvidenceResponse {
     pub proof_generated: bool,
     pub message: String,
     pub next_steps: Vec<String>,
+    pub viewing_key: Option<String>,
 }
 
 #[derive(Clone)]
@@ -64,6 +66,7 @@ pub struct AppState {
     pub otp_manager: Arc<OtpManager>,
     pub mina_verifier: Arc<MinaProofVerifier>,
     pub ipfs: Arc<crate::ipfs_client::IpfsClient>,
+    pub near_client: Arc<crate::near_client::NearTransactionManager>,
 }
 
 pub async fn request_otp(
@@ -186,6 +189,7 @@ pub async fn submit_evidence(
                     proof_generated: false,
                     message: "Session not verified. Please complete email verification first.".to_string(),
                     next_steps: vec![],
+                    viewing_key: None,
                 }));
             }
             Ok(None) => {
@@ -195,6 +199,7 @@ pub async fn submit_evidence(
                     proof_generated: false,
                     message: "Invalid session. Please request a new verification code.".to_string(),
                     next_steps: vec![],
+                    viewing_key: None,
                 }));
             }
             Err(e) => {
@@ -205,6 +210,7 @@ pub async fn submit_evidence(
                     proof_generated: false,
                     message: "Failed to validate session".to_string(),
                     next_steps: vec![],
+                    viewing_key: None,
                 }));
             }
         }
@@ -223,6 +229,7 @@ pub async fn submit_evidence(
                     proof_generated: false,
                     message: format!("Mina credential verification failed: {}", e),
                     next_steps: vec![],
+                    viewing_key: None,
                 }));
             }
         }
@@ -235,6 +242,8 @@ pub async fn submit_evidence(
 
     let timestamp = chrono::Utc::now().timestamp() as u64;
 
+    let viewing_key = EvidenceEncryption::generate_viewing_key();
+
     let commitment_hash = {
         use sha2::{Sha256, Digest};
         let mut hasher = Sha256::new();
@@ -245,19 +254,56 @@ pub async fn submit_evidence(
         hex::encode(hasher.finalize())
     };
 
+    let viewing_keys_hash = {
+        use sha2::{Sha256, Digest};
+        let mut hasher = Sha256::new();
+        hasher.update(viewing_key.as_bytes());
+        hex::encode(hasher.finalize())
+    };
+
+    let encrypted_title = match EvidenceEncryption::encrypt_string(&evidence.evidence_type, &viewing_key) {
+        Ok(encrypted) => encrypted,
+        Err(e) => {
+            tracing::error!("Failed to encrypt title: {}", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(EvidenceResponse {
+                success: false,
+                evidence_id: String::new(),
+                proof_generated: false,
+                message: format!("Failed to encrypt title: {}", e),
+                next_steps: vec![],
+                viewing_key: None,
+            }));
+        }
+    };
+
+    let encrypted_description = match EvidenceEncryption::encrypt_string(&evidence.description, &viewing_key) {
+        Ok(encrypted) => encrypted,
+        Err(e) => {
+            tracing::error!("Failed to encrypt description: {}", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(EvidenceResponse {
+                success: false,
+                evidence_id: String::new(),
+                proof_generated: false,
+                message: format!("Failed to encrypt description: {}", e),
+                next_steps: vec![],
+                viewing_key: None,
+            }));
+        }
+    };
+
     let metadata = crate::ipfs_client::EvidenceMetadata {
         evidence_id: evidence_id.clone(),
         board_category: board_category.clone(),
-        title: evidence.evidence_type.clone(),
-        description: evidence.description.clone(),
+        encrypted_title,
+        encrypted_description,
         files: vec![],
         timestamp,
         zcash_txid: None,
         commitment_hash: commitment_hash.clone(),
-        viewing_keys: vec![],
+        viewing_keys_hash,
     };
 
-    let ipfs_cid = match state.ipfs.upload_evidence(&metadata, vec![]).await {
+    let ipfs_cid = match state.ipfs.upload_evidence(&metadata, vec![], &viewing_key).await {
         Ok(cid) => cid,
         Err(e) => {
             tracing::warn!("IPFS upload failed ({}), generating fallback CID", e);
@@ -294,12 +340,13 @@ pub async fn submit_evidence(
                     evidence.evidence_type, evidence_id
                 ),
                 next_steps: vec![
-                    "Evidence has been processed".to_string(),
-                    "Zero-knowledge proof generated".to_string(),
+                    "Evidence has been encrypted and processed".to_string(),
+                    "Save your viewing key securely - you need it to access the evidence".to_string(),
                     "Use Zashi wallet to create a shielded transaction".to_string(),
                     format!("Include this evidence ID in memo: {}", evidence_id),
                     "Transaction will contain cryptographic proof of evidence".to_string(),
                 ],
+                viewing_key: Some(viewing_key),
             };
 
             tracing::info!("Evidence processed successfully: {}", evidence_id);
@@ -315,6 +362,7 @@ pub async fn submit_evidence(
                     proof_generated: false,
                     message: format!("Failed to save evidence: {}", e),
                     next_steps: vec![],
+                    viewing_key: None,
                 }),
             )
         }
@@ -334,10 +382,21 @@ pub async fn get_my_evidence(
     };
 
     if session_id.is_empty() || session_id == "skip_otp" {
-        return (StatusCode::OK, Json(serde_json::json!({
-            "success": true,
-            "evidence_ids": []
-        })));
+        match state.db.get_all_evidence_ids().await {
+            Ok(evidence_ids) => {
+                return (StatusCode::OK, Json(serde_json::json!({
+                    "success": true,
+                    "evidence_ids": evidence_ids
+                })));
+            }
+            Err(e) => {
+                tracing::error!("Failed to fetch all evidence for testing session: {}", e);
+                return (StatusCode::OK, Json(serde_json::json!({
+                    "success": true,
+                    "evidence_ids": []
+                })));
+            }
+        }
     }
 
     match state.otp_manager.get_user_evidence(session_id).await {

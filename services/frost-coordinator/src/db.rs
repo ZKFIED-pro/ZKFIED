@@ -1150,6 +1150,231 @@ impl Database {
 
         Ok(evidence_ids)
     }
+
+    pub async fn get_all_evidence_ids(&self) -> Result<Vec<String>> {
+        let evidence_ids = sqlx::query_scalar::<_, String>(
+            "SELECT evidence_id FROM evidence_submissions ORDER BY submission_timestamp DESC"
+        )
+        .fetch_all(&self.pool)
+        .await
+        .context("Failed to get all evidence IDs")?;
+
+        Ok(evidence_ids)
+    }
+
+    pub async fn insert_access_request(&self, request: &crate::marketplace::AccessRequest) -> Result<()> {
+        let purpose_str = serde_json::to_string(&request.purpose)?;
+
+        sqlx::query(
+            "INSERT INTO access_requests (request_id, evidence_id, requester_id, bid_amount, purpose, zk_credentials, deadline, status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(&request.request_id)
+        .bind(&request.evidence_id)
+        .bind(&request.requester_id)
+        .bind(request.bid_amount as i64)
+        .bind(purpose_str)
+        .bind(request.zk_credentials.as_ref())
+        .bind(request.deadline)
+        .bind(format!("{:?}", request.status))
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn insert_verification_request(&self, request: &crate::marketplace::VerificationRequest) -> Result<()> {
+        let verification_type_str = serde_json::to_string(&request.verification_type)?;
+        let requirements_str = serde_json::to_string(&request.requirements)?;
+
+        sqlx::query(
+            "INSERT INTO verification_requests (request_id, evidence_id, verification_type, reward_amount, deadline, requirements)
+             VALUES (?, ?, ?, ?, ?, ?)"
+        )
+        .bind(&request.request_id)
+        .bind(&request.evidence_id)
+        .bind(verification_type_str)
+        .bind(request.reward_amount as i64)
+        .bind(request.deadline)
+        .bind(requirements_str)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn insert_solver_bid(&self, bid: &crate::marketplace::SolverBid) -> Result<()> {
+        sqlx::query(
+            "INSERT INTO solver_bids (bid_id, request_id, solver_id, bid_amount, estimated_completion, credentials, proof_of_capability)
+             VALUES (?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(&bid.bid_id)
+        .bind(&bid.request_id)
+        .bind(&bid.solver_id)
+        .bind(bid.bid_amount as i64)
+        .bind(bid.estimated_completion)
+        .bind(&bid.credentials)
+        .bind(&bid.proof_of_capability)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn update_access_request_status(&self, request_id: &str, status: crate::marketplace::RequestStatus) -> Result<()> {
+        sqlx::query(
+            "UPDATE access_requests SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE request_id = ?"
+        )
+        .bind(format!("{:?}", status))
+        .bind(request_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn mark_bid_accepted(&self, bid_id: &str) -> Result<()> {
+        sqlx::query(
+            "UPDATE solver_bids SET status = 'Accepted' WHERE bid_id = ?"
+        )
+        .bind(bid_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn get_access_requests_by_evidence(&self, evidence_id: &str) -> Result<Vec<crate::marketplace::AccessRequest>> {
+        let rows = sqlx::query(
+            "SELECT request_id, evidence_id, requester_id, bid_amount, purpose, zk_credentials, deadline, status
+             FROM access_requests WHERE evidence_id = ? ORDER BY bid_amount DESC"
+        )
+        .bind(evidence_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut requests = Vec::new();
+        for row in rows {
+            let purpose_str: String = row.get("purpose");
+            let status_str: String = row.get("status");
+
+            let purpose: crate::marketplace::AccessPurpose = serde_json::from_str(&purpose_str)?;
+            let status = match status_str.as_str() {
+                "Pending" => crate::marketplace::RequestStatus::Pending,
+                "Bidding" => crate::marketplace::RequestStatus::Bidding,
+                "Accepted" => crate::marketplace::RequestStatus::Accepted,
+                "Fulfilled" => crate::marketplace::RequestStatus::Fulfilled,
+                "Rejected" => crate::marketplace::RequestStatus::Rejected,
+                "Expired" => crate::marketplace::RequestStatus::Expired,
+                _ => crate::marketplace::RequestStatus::Pending,
+            };
+
+            requests.push(crate::marketplace::AccessRequest {
+                request_id: row.get("request_id"),
+                evidence_id: row.get("evidence_id"),
+                requester_id: row.get("requester_id"),
+                bid_amount: row.get::<i64, _>("bid_amount") as u128,
+                purpose,
+                zk_credentials: row.get("zk_credentials"),
+                deadline: row.get("deadline"),
+                status,
+            });
+        }
+
+        Ok(requests)
+    }
+
+    pub async fn get_pending_verification_requests(&self) -> Result<Vec<crate::marketplace::VerificationRequest>> {
+        let rows = sqlx::query(
+            "SELECT request_id, evidence_id, verification_type, reward_amount, deadline, requirements
+             FROM verification_requests WHERE status = 'Pending' ORDER BY reward_amount DESC"
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut requests = Vec::new();
+        for row in rows {
+            let verification_type_str: String = row.get("verification_type");
+            let requirements_str: String = row.get("requirements");
+
+            let verification_type: crate::marketplace::VerificationType = serde_json::from_str(&verification_type_str)?;
+            let requirements: Vec<String> = serde_json::from_str(&requirements_str)?;
+
+            requests.push(crate::marketplace::VerificationRequest {
+                request_id: row.get("request_id"),
+                evidence_id: row.get("evidence_id"),
+                verification_type,
+                reward_amount: row.get::<i64, _>("reward_amount") as u128,
+                deadline: row.get("deadline"),
+                requirements,
+            });
+        }
+
+        Ok(requests)
+    }
+
+    pub async fn get_solver_bids_for_request(&self, request_id: &str) -> Result<Vec<crate::marketplace::SolverBid>> {
+        let rows = sqlx::query(
+            "SELECT bid_id, request_id, solver_id, bid_amount, estimated_completion, credentials, proof_of_capability
+             FROM solver_bids WHERE request_id = ? ORDER BY bid_amount ASC"
+        )
+        .bind(request_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut bids = Vec::new();
+        for row in rows {
+            bids.push(crate::marketplace::SolverBid {
+                bid_id: row.get("bid_id"),
+                request_id: row.get("request_id"),
+                solver_id: row.get("solver_id"),
+                bid_amount: row.get::<i64, _>("bid_amount") as u128,
+                estimated_completion: row.get("estimated_completion"),
+                credentials: row.get("credentials"),
+                proof_of_capability: row.get("proof_of_capability"),
+            });
+        }
+
+        Ok(bids)
+    }
+
+    pub async fn store_wrapped_key(&self, wrapped_key: &crate::marketplace::WrappedKey, request_id: Option<&str>) -> Result<()> {
+        sqlx::query(
+            "INSERT INTO wrapped_keys (evidence_id, recipient_public_key, encrypted_key, nonce, request_id)
+             VALUES (?, ?, ?, ?, ?)"
+        )
+        .bind(&wrapped_key.evidence_id)
+        .bind(&wrapped_key.recipient_public_key)
+        .bind(&wrapped_key.encrypted_key)
+        .bind(&wrapped_key.nonce)
+        .bind(request_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn get_wrapped_key(&self, evidence_id: &str, recipient_public_key: &[u8]) -> Result<Option<crate::marketplace::WrappedKey>> {
+        let row = sqlx::query(
+            "SELECT evidence_id, recipient_public_key, encrypted_key, nonce
+             FROM wrapped_keys WHERE evidence_id = ? AND recipient_public_key = ?"
+        )
+        .bind(evidence_id)
+        .bind(recipient_public_key)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(row) = row {
+            Ok(Some(crate::marketplace::WrappedKey {
+                evidence_id: row.get("evidence_id"),
+                recipient_public_key: row.get("recipient_public_key"),
+                encrypted_key: row.get("encrypted_key"),
+                nonce: row.get("nonce"),
+            }))
+        } else {
+            Ok(None)
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1317,7 +1542,6 @@ impl sqlx::FromRow<'_, sqlx::sqlite::SqliteRow> for UserSessionRecord {
         })
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;

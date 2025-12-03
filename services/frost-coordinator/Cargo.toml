@@ -34,11 +34,13 @@ rand_core = { version = "0.6", features = ["getrandom"] }
 secrecy = "0.8"
 
 # HTTP server
-axum = { version = "0.7", features = ["macros"] }
+axum = { version = "0.7", features = ["macros", "ws"] }
 tokio = { version = "1", features = ["full"] }
 tokio-stream = "0.1"
 tower = "0.4"
 tower-http = { version = "0.5", features = ["cors", "trace"] }
+tokio-tungstenite = "0.26"
+futures-util = "0.3"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -80,7 +82,10 @@ rand = "0.8"
 bip39 = { version = "2.0", features = ["rand"] }
 
 # RPC Client
-reqwest = { version = "0.12", features = ["json", "multipart", "stream"] }
+reqwest = { version = "0.12", features = ["json", "multipart", "stream", "rustls-tls"] }
+
+# Pin home crate to version compatible with Rust 1.86
+home = "=0.5.9"
 
 # NEAR Protocol Integration
 near-crypto = "0.31"

@@ -14,11 +14,15 @@ use zkfied_frost_coordinator::{
     db::Database,
     ipfs_client::IpfsClient,
     lightclient::LightClient,
+    marketplace::EvidenceMarketplace,
+    marketplace_routes::MarketplaceState,
     metrics,
     mina_verifier::{MinaProofVerifier, MinaCredentialProof},
     near_client::{NearTransactionManager, NearNetwork},
+    near_intents::NearIntentsClient,
     params_downloader::ParamsDownloader,
     rpc_client::ZcashRpcClient,
+    solver_client::SolverEventHandler,
     orchestrator::{
         EvidenceOrchestrator,
         EvidenceSubmissionRequest,
@@ -134,7 +138,7 @@ async fn main() -> anyhow::Result<()> {
 
     let near_manager = Arc::new(NearTransactionManager::new(
         near_contract_id,
-        near_network,
+        near_network.clone(),
         db.clone(),
     ));
 
@@ -162,6 +166,38 @@ async fn main() -> anyhow::Result<()> {
         }
     } else {
         tracing::warn!("NEAR_ACCOUNT_ID or NEAR_PRIVATE_KEY not set - NEAR functionality disabled");
+    }
+
+    // Initialize NEAR marketplace client
+    let near_marketplace_contract_id = std::env::var("NEAR_MARKETPLACE_CONTRACT_ID")
+        .unwrap_or_else(|_| "marketplace.reg.mrhashfox.testnet".to_string())
+        .parse()
+        .expect("Invalid NEAR marketplace contract ID");
+
+    let near_marketplace = Arc::new(zkfied_frost_coordinator::near_client::NearMarketplaceClient::new(
+        near_marketplace_contract_id,
+        near_network.clone(),
+    ));
+
+    tracing::info!("NEAR marketplace client initialized");
+
+    // Initialize marketplace account (same as evidence registry account)
+    if let (Ok(account_id_str), Ok(private_key_str)) = (
+        std::env::var("NEAR_ACCOUNT_ID"),
+        std::env::var("NEAR_PRIVATE_KEY"),
+    ) {
+        use zkfied_frost_coordinator::near_client::NearAccount;
+        match (account_id_str.parse(), private_key_str.parse()) {
+            (Ok(account_id), Ok(secret_key)) => {
+                let near_account = NearAccount::from_secret_key(account_id, secret_key);
+                if let Err(e) = near_marketplace.initialize_account(near_account).await {
+                    tracing::error!("Failed to initialize NEAR marketplace account: {}", e);
+                } else {
+                    tracing::info!("NEAR marketplace account initialized successfully");
+                }
+            }
+            _ => {}
+        }
     }
 
     let mina_graphql_endpoint = std::env::var("MINA_GRAPHQL_ENDPOINT")
@@ -212,12 +248,25 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("OTP manager initialized");
 
+    let marketplace = Arc::new(EvidenceMarketplace::with_near_client(db.clone(), near_marketplace.clone()));
+    let intents_client = Arc::new(NearIntentsClient::new());
+
+    tracing::info!("Evidence marketplace initialized with NEAR contract integration");
+
     let api_state = Arc::new(AppState {
         db: db.clone(),
         network,
         otp_manager,
         mina_verifier: mina_verifier.clone(),
         ipfs: ipfs.clone(),
+        near_client: near_manager.clone(),
+    });
+
+    let marketplace_state = Arc::new(MarketplaceState {
+        db: db.clone(),
+        marketplace,
+        intents_client,
+        near_marketplace: near_marketplace.clone(),
     });
 
     let frost_router = Router::new()
@@ -247,8 +296,22 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/stats", get(api_routes::get_stats))
         .with_state(api_state);
 
+    let marketplace_router = Router::new()
+        .route("/api/marketplace/access-request", post(zkfied_frost_coordinator::marketplace_routes::create_access_request))
+        .route("/api/marketplace/verification-request", post(zkfied_frost_coordinator::marketplace_routes::create_verification_request))
+        .route("/api/marketplace/bid", post(zkfied_frost_coordinator::marketplace_routes::submit_bid))
+        .route("/api/marketplace/accept-bid", post(zkfied_frost_coordinator::marketplace_routes::accept_bid))
+        .route("/api/marketplace/requests/:evidence_id", get(zkfied_frost_coordinator::marketplace_routes::get_active_requests))
+        .route("/api/marketplace/verification-requests", get(zkfied_frost_coordinator::marketplace_routes::get_verification_requests))
+        .route("/api/marketplace/bids/:request_id", get(zkfied_frost_coordinator::marketplace_routes::get_bids))
+        .route("/api/marketplace/wrap-key", post(zkfied_frost_coordinator::marketplace_routes::wrap_key))
+        .route("/api/marketplace/near/request/:request_id", get(zkfied_frost_coordinator::marketplace_routes::get_near_request))
+        .route("/api/marketplace/near/bids/:request_id", get(zkfied_frost_coordinator::marketplace_routes::get_near_bids))
+        .with_state(marketplace_state);
+
     let app = frost_router
         .merge(hybrid_router)
+        .merge(marketplace_router)
         .layer(tower_http::cors::CorsLayer::permissive())
         .layer(tower_http::trace::TraceLayer::new_for_http());
 
@@ -256,6 +319,19 @@ async fn main() -> anyhow::Result<()> {
         .ok()
         .and_then(|p| p.parse().ok())
         .unwrap_or(3000);
+
+    tracing::info!("Connecting to NEAR Solver Bus...");
+    match SolverEventHandler::new().await {
+        Ok(handler) => {
+            tracing::info!("Solver Bus WebSocket connected");
+            tokio::spawn(async move {
+                handler.handle_events().await;
+            });
+        }
+        Err(e) => {
+            tracing::warn!("Failed to connect to Solver Bus: {} (continuing anyway)", e);
+        }
+    }
 
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port))
         .await?;
@@ -283,6 +359,16 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("   POST   /api/evidence/submit      - Submit evidence, get ZK proof + instructions");
     tracing::info!("   GET    /api/wallet/address       - Get wallet address for funding");
     tracing::info!("   GET    /api/stats                - Get hybrid mode status");
+    tracing::info!("");
+    tracing::info!("   === Evidence Marketplace (NEAR Intents) ===");
+    tracing::info!("   POST   /api/marketplace/access-request         - Create evidence access request");
+    tracing::info!("   POST   /api/marketplace/verification-request   - Post verification bounty");
+    tracing::info!("   POST   /api/marketplace/bid                    - Submit solver bid");
+    tracing::info!("   POST   /api/marketplace/accept-bid             - Accept a bid");
+    tracing::info!("   GET    /api/marketplace/requests/:evidence_id  - Get active requests");
+    tracing::info!("   GET    /api/marketplace/verification-requests  - Get verification requests");
+    tracing::info!("   GET    /api/marketplace/bids/:request_id       - Get bids for request");
+    tracing::info!("   POST   /api/marketplace/wrap-key               - Wrap key for recipient");
     tracing::info!("");
     tracing::info!("Hybrid Mode: Use Zashi wallet for transactions, ZKFIED for zero-knowledge proofs");
 
