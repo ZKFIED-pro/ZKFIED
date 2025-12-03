@@ -11,6 +11,7 @@ import SubmitEvidencePage from '@/components/pages/SubmitEvidencePage'
 import BrowseEvidencePage from '@/components/pages/BrowseEvidencePage'
 import HowItWorksPage from '@/components/pages/HowItWorksPage'
 import ProfilePage from '@/components/pages/ProfilePage'
+import MarketplacePage from '@/components/pages/MarketplacePage'
 import EvidenceDetailPage from '@/components/pages/EvidenceDetailPage'
 
 // Layout wrapper component
@@ -53,6 +54,7 @@ function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/submit" element={<SubmitEvidencePage />} />
           <Route path="/browse" element={<BrowseEvidencePage />} />
+          <Route path="/marketplace" element={<MarketplacePage />} />
           <Route path="/evidence/:evidenceId" element={<EvidenceDetailPage />} />
           <Route path="/how-it-works" element={<HowItWorksPage />} />
           <Route path="/profile" element={<ProfilePage />} />

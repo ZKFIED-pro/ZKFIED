@@ -29,6 +29,8 @@ const Navbar: React.FC = () => {
   const navigation = [
     { name: 'Submit Evidence', href: '/submit' },
     { name: 'Browse', href: '/browse' },
+    { name: 'Marketplace', href: '/marketplace' },
+    { name: 'Profile', href: '/profile' },
     { name: 'How It Works', href: '/how-it-works' },
   ]
   

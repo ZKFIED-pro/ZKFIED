@@ -117,38 +117,31 @@ const HomePage: React.FC = () => {
       <section style={{ padding: '48px 0', borderTop: '1px solid rgb(52, 52, 52)', borderBottom: '1px solid rgb(52, 52, 52)' }}>
         <div className="container">
           <div className="grid grid-4">
-            <div className="text-center">
-              <div className="text-white" style={{ fontSize: '48px', fontWeight: 700, marginBottom: '8px' }}>
-                {loading ? '—' : stats.total}
+            {[
+              { name: 'Zcash', image: '/images/zcash.jpeg' },
+              { name: 'NEAR', image: '/images/near.jpeg' },
+              { name: 'Mina', image: '/images/mina.jpeg' },
+              { name: 'Tor', image: '/images/tor.jpeg' },
+            ].map((tech) => (
+              <div key={tech.name} className="st-card">
+                <div className="st-card-inner" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ marginBottom: '16px' }}>
+                    <img
+                      src={tech.image}
+                      alt={tech.name}
+                      style={{
+                        width: '140px',
+                        height: '140px',
+                        objectFit: 'contain',
+                        filter: 'grayscale(100%)',
+                        opacity: 0.8
+                      }}
+                    />
+                  </div>
+                  <h3>{tech.name}</h3>
+                </div>
               </div>
-              <div className="text-gray" style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                Total Submissions
-              </div>
-            </div>
-            <div className="text-center">
-              <div className="text-white" style={{ fontSize: '48px', fontWeight: 700, marginBottom: '8px' }}>
-                {loading ? '—' : stats.confirmed}
-              </div>
-              <div className="text-gray" style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                Confirmed On-Chain
-              </div>
-            </div>
-            <div className="text-center">
-              <div className="text-white" style={{ fontSize: '48px', fontWeight: 700, marginBottom: '8px' }}>
-                {loading ? '—' : stats.pending}
-              </div>
-              <div className="text-gray" style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                Pending Authorization
-              </div>
-            </div>
-            <div className="text-center">
-              <div className="text-white" style={{ fontSize: '48px', fontWeight: 700, marginBottom: '8px' }}>
-                {stats.boards}
-              </div>
-              <div className="text-gray" style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                Board Categories
-              </div>
-            </div>
+            ))}
           </div>
         </div>
       </section>
