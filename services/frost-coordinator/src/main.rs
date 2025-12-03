@@ -267,6 +267,7 @@ async fn main() -> anyhow::Result<()> {
         marketplace,
         intents_client,
         near_marketplace: near_marketplace.clone(),
+        ipfs: ipfs.clone(),
     });
 
     let frost_router = Router::new()
@@ -305,6 +306,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/marketplace/verification-requests", get(zkfied_frost_coordinator::marketplace_routes::get_verification_requests))
         .route("/api/marketplace/bids/:request_id", get(zkfied_frost_coordinator::marketplace_routes::get_bids))
         .route("/api/marketplace/wrap-key", post(zkfied_frost_coordinator::marketplace_routes::wrap_key))
+        .route("/api/marketplace/check-evidence", post(zkfied_frost_coordinator::marketplace_routes::check_evidence))
         .route("/api/marketplace/near/request/:request_id", get(zkfied_frost_coordinator::marketplace_routes::get_near_request))
         .route("/api/marketplace/near/bids/:request_id", get(zkfied_frost_coordinator::marketplace_routes::get_near_bids))
         .with_state(marketplace_state);

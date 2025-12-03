@@ -18,6 +18,7 @@ pub struct MarketplaceState {
     pub marketplace: Arc<EvidenceMarketplace>,
     pub intents_client: Arc<NearIntentsClient>,
     pub near_marketplace: Arc<crate::near_client::NearMarketplaceClient>,
+    pub ipfs: Arc<crate::ipfs_client::IpfsClient>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -445,6 +446,115 @@ pub async fn get_near_bids(
             (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
                 "success": false,
                 "message": format!("Failed to get bids: {}", e)
+            })))
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CheckEvidenceBody {
+    pub evidence_id: String,
+    pub viewing_key: String,
+}
+
+pub async fn check_evidence(
+    State(state): State<Arc<MarketplaceState>>,
+    Json(body): Json<CheckEvidenceBody>,
+) -> impl IntoResponse {
+    use crate::encryption::{EvidenceEncryption, EncryptedData};
+
+    let evidence = match state.db.get_evidence(&body.evidence_id).await {
+        Ok(Some(ev)) => ev,
+        Ok(None) => {
+            return (StatusCode::NOT_FOUND, Json(serde_json::json!({
+                "success": false,
+                "message": "Evidence not found"
+            })));
+        }
+        Err(e) => {
+            tracing::error!("Failed to get evidence: {}", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                "success": false,
+                "message": format!("Failed to get evidence: {}", e)
+            })));
+        }
+    };
+
+    let encrypted_data = match state.ipfs.download_file(&evidence.ipfs_cid).await {
+        Ok(data) => data,
+        Err(e) => {
+            tracing::error!("Failed to fetch from IPFS: {}", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                "success": false,
+                "message": "Failed to fetch evidence from IPFS"
+            })));
+        }
+    };
+
+    let encrypted_json: serde_json::Value = match serde_json::from_slice(&encrypted_data) {
+        Ok(json) => json,
+        Err(e) => {
+            tracing::error!("Failed to parse encrypted data: {}", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                "success": false,
+                "message": "Invalid encrypted data format"
+            })));
+        }
+    };
+
+    let encrypted = EncryptedData {
+        ciphertext: match hex::decode(encrypted_json["ciphertext"].as_str().unwrap_or("")) {
+            Ok(data) => data,
+            Err(_) => {
+                return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                    "success": false,
+                    "message": "Invalid ciphertext format"
+                })));
+            }
+        },
+        nonce: match hex::decode(encrypted_json["nonce"].as_str().unwrap_or("")) {
+            Ok(data) => data,
+            Err(_) => {
+                return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                    "success": false,
+                    "message": "Invalid nonce format"
+                })));
+            }
+        },
+    };
+
+    match EvidenceEncryption::decrypt_string(&encrypted, &body.viewing_key) {
+        Ok(decrypted) => {
+            let evidence_data: serde_json::Value = match serde_json::from_str(&decrypted) {
+                Ok(data) => data,
+                Err(e) => {
+                    tracing::error!("Failed to parse decrypted evidence: {}", e);
+                    return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
+                        "success": false,
+                        "message": "Failed to parse decrypted evidence"
+                    })));
+                }
+            };
+
+            (StatusCode::OK, Json(serde_json::json!({
+                "success": true,
+                "evidence_id": body.evidence_id,
+                "evidence_data": evidence_data,
+                "metadata": {
+                    "ipfs_cid": evidence.ipfs_cid,
+                    "board_category": evidence.board_category,
+                    "title": evidence.title,
+                    "description": evidence.description,
+                    "status": evidence.status,
+                    "submission_timestamp": evidence.submission_timestamp,
+                }
+            })))
+        }
+        Err(e) => {
+            tracing::error!("Failed to decrypt evidence: {}", e);
+            (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                "success": false,
+                "message": "Invalid viewing key or decryption failed"
             })))
         }
     }
