@@ -23,6 +23,7 @@ export interface VerificationRequest {
   requirements_hash: string
   status: 'Pending' | 'Accepted' | 'Fulfilled' | 'Rejected'
   selected_solver?: string
+  deadline: number
   created_at: number
 }
 
@@ -73,8 +74,9 @@ export const marketplaceApi = {
 
   async submitBid(data: {
     request_id: string
+    solver_id: string
     bid_amount: string
-    estimated_completion: number
+    estimated_completion: string
     credentials: string
     proof_of_capability: string
   }) {

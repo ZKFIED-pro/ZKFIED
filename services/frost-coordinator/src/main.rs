@@ -204,7 +204,7 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or_else(|_| "https://api.minascan.io/node/devnet/v1/graphql".to_string());
 
     let mina_zkapp_address = std::env::var("MINA_ZKAPP_ADDRESS")
-        .unwrap_or_else(|_| "B62qjLQo287BXoYZBweHfRN5bikWUFdc81rqECVEiRCBEoYBEGCbNc3".to_string());
+        .unwrap_or_else(|_| "B62qjfNr4fERPmVx6RbZxdYLmELeJwoisWGqcsWyceAn17DVAMNm4zr".to_string());
 
     let mina_verifier = Arc::new(MinaProofVerifier::new(
         mina_graphql_endpoint.clone(),
