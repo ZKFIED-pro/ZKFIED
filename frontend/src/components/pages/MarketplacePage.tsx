@@ -730,9 +730,12 @@ const MarketplacePage: React.FC = () => {
                   <label style={{ display: 'block', color: '#888', fontFamily: 'monospace', fontSize: '11px', marginBottom: '8px' }}>
                     Evidence ID
                   </label>
-                  <select
+                  <input
+                    type="text"
+                    list="evidence-list"
                     value={formData.evidence_id}
                     onChange={(e) => setFormData({ ...formData, evidence_id: e.target.value })}
+                    placeholder="Enter or select evidence ID..."
                     required
                     style={{
                       width: '100%',
@@ -741,17 +744,19 @@ const MarketplacePage: React.FC = () => {
                       border: '1px solid #333',
                       color: '#fff',
                       fontFamily: 'monospace',
-                      fontSize: '12px',
-                      cursor: 'pointer'
+                      fontSize: '12px'
                     }}
-                  >
-                    <option value="">Select your evidence</option>
+                  />
+                  <datalist id="evidence-list">
                     {myEvidence.map((evidenceId) => (
-                      <option key={evidenceId} value={evidenceId}>
-                        {evidenceId}
-                      </option>
+                      <option key={evidenceId} value={evidenceId} />
                     ))}
-                  </select>
+                  </datalist>
+                  {myEvidence.length > 0 && (
+                    <div style={{ color: '#666', fontFamily: 'monospace', fontSize: '10px', marginTop: '4px' }}>
+                      You can type an evidence ID or select from your {myEvidence.length} evidence{myEvidence.length !== 1 ? 's' : ''}
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ marginBottom: '24px' }}>

@@ -133,6 +133,7 @@ export interface HybridEvidenceResponse {
   proof_generated: boolean
   message: string
   next_steps: string[]
+  viewing_key?: string
 }
 
 export interface WalletAddress {
@@ -368,6 +369,29 @@ class ZKFIEDApi {
     return this.request('/api/evidence/my-evidence', {
       method: 'POST',
       body: JSON.stringify({ session_id: sessionId }),
+    })
+  }
+
+  async checkEvidence(evidenceId: string, viewingKey: string): Promise<{
+    success: boolean
+    evidence_id: string
+    evidence_data: any
+    metadata: {
+      ipfs_cid: string
+      board_category: string
+      title: string
+      description: string
+      status: string
+      submission_timestamp: number
+    }
+    message?: string
+  }> {
+    return this.request('/api/marketplace/check-evidence', {
+      method: 'POST',
+      body: JSON.stringify({
+        evidence_id: evidenceId,
+        viewing_key: viewingKey
+      }),
     })
   }
 }

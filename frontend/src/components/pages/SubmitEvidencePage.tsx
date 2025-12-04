@@ -340,6 +340,37 @@ const SubmitEvidencePage: React.FC = () => {
                   </div>
                 </div>
 
+                {hybridResponse.viewing_key && (
+                  <div style={{ marginBottom: '20px', padding: '16px', background: 'rgba(255, 165, 0, 0.05)', border: '1px solid rgba(255, 165, 0, 0.3)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                      <p className="text-gray" style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>
+                        Viewing Key
+                      </p>
+                      <span style={{ fontSize: '10px', color: 'rgb(255, 165, 0)', fontWeight: 'bold' }}> IMPORTANT</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                      <code style={{ flex: 1, padding: '12px', background: 'rgb(20, 20, 20)', border: '1px solid rgb(52, 52, 52)', fontSize: '11px', fontFamily: 'monospace', color: 'rgb(255, 165, 0)', wordBreak: 'break-all' }}>
+                        {hybridResponse.viewing_key}
+                      </code>
+                      <button
+                        onClick={() => copyToClipboard(hybridResponse.viewing_key!)}
+                        className="st-btn"
+                        style={{ padding: '10px 16px', fontSize: '10px', borderColor: 'rgb(255, 165, 0)', color: 'rgb(255, 165, 0)' }}
+                      >
+                        Copy
+                      </button>
+                    </div>
+                    <div style={{ padding: '12px', background: 'rgba(255, 0, 0, 0.1)', border: '1px solid rgba(255, 0, 0, 0.3)', borderRadius: '4px' }}>
+                      <p style={{ fontSize: '10px', color: 'rgb(255, 165, 0)', lineHeight: '16px', margin: 0 }}>
+                        <strong> SAVE THIS VIEWING KEY SECURELY!</strong><br/>
+                        • This is the ONLY way to decrypt and access your evidence<br/>
+                        • We do NOT store this key - if you lose it, your evidence cannot be recovered<br/>
+                        • Keep it in a secure location <br/>
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 <div style={{ marginBottom: '20px', padding: '16px', background: 'rgba(0, 136, 255, 0.05)', border: '1px solid rgba(0, 136, 255, 0.2)' }}>
                   <h4 className="text-white mb-sm" style={{ fontSize: '12px' }}>Step 2: Create Zcash Transaction in Zashi Wallet</h4>
                   <ol className="text-gray" style={{ fontSize: '10px', lineHeight: '18px', paddingLeft: '20px' }}>

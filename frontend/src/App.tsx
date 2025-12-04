@@ -13,6 +13,7 @@ import HowItWorksPage from '@/components/pages/HowItWorksPage'
 import ProfilePage from '@/components/pages/ProfilePage'
 import MarketplacePage from '@/components/pages/MarketplacePage'
 import EvidenceDetailPage from '@/components/pages/EvidenceDetailPage'
+import CheckEvidencePage from '@/components/pages/CheckEvidencePage'
 
 // Layout wrapper component
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -55,6 +56,7 @@ function App() {
           <Route path="/submit" element={<SubmitEvidencePage />} />
           <Route path="/browse" element={<BrowseEvidencePage />} />
           <Route path="/marketplace" element={<MarketplacePage />} />
+          <Route path="/check-evidence" element={<CheckEvidencePage />} />
           <Route path="/evidence/:evidenceId" element={<EvidenceDetailPage />} />
           <Route path="/how-it-works" element={<HowItWorksPage />} />
           <Route path="/profile" element={<ProfilePage />} />
