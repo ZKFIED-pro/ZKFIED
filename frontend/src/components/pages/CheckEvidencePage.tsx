@@ -75,7 +75,7 @@ const CheckEvidencePage: React.FC = () => {
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundImage: 'url(/images/6.jpg)',
+          backgroundImage: 'url(/images/8.jpg)',
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           backgroundRepeat: 'no-repeat',
