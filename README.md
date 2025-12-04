@@ -1,11 +1,9 @@
 # ZKFIED is the safest whistleblower tool.
-
 We have developed this for whistleblower protection and evidence cooperation for sensitive topics. 
 
 Production stack: Zcash Shielded Transactions, FROST Threshold Signatures (3-of-5), ZK Attestations, IPFS, Tor/I2P Hidden Services, NEAR Protocol Registry, NEAR Intents, Mina zkApps, OTP Authentication, Evidence Marketplace
 
 ## Production Deployments
-
 **Frontend:** https://zkfied.vercel.app
 
 **Backend:** https://zkfied-frost-testnet.fly.dev
@@ -15,7 +13,6 @@ Production stack: Zcash Shielded Transactions, FROST Threshold Signatures (3-of-
 **Mina zkApp:** https://minascan.io/devnet/account/B62qjfNr4fERPmVx6RbZxdYLmELeJwoisWGqcsWyceAn17DVAMNm4zr
 
 ## Infras Links
-
 **Zcash Testnet:**
 - Explorer: https://testnet.zcashblockexplorer.com
 - LightwalletD: https://testnet.lightwalletd.com:9067
