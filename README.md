@@ -49,7 +49,7 @@ Production stack: Zcash Shielded Transactions, FROST Threshold Signatures (3-of-
 
 ---
 
-### a bit of history
+### A bit of history
 
 **1. SecureDrop (2013-present)**
 - Centralized server infrastructure, single point of failure
@@ -66,36 +66,12 @@ Production stack: Zcash Shielded Transactions, FROST Threshold Signatures (3-of-
 - **Edward Snowden (2013):** Required direct journalist contact + asylum in Russia to avoid prosecution
 - **Chelsea Manning (2010):** Confided in Adrian Lamo who reported her to FBI, sentenced to 35 years
 
-### why they failed
+### Why they failed
 1. government can subpoena/seize centralized servers (Lavabit 2013)
 2. email headers, IP logs, printer tracking dots reveal source identity
 3. one admin key compromised = entire platform compromised
-4. manual verification impersonation/honeypots
-5. centralized storage allows evidence deletion/modification
-6. payment rails can be blocked (WikiLeaks 2010)
-
----
-
-## THE SOLUTION: ZKFIED ARCHITECTURE
 
 We studied what happened and created ZKFIED :
-
-1. **Zcash Shielded Pool** is the censorship transaction layer
-2. **FROST Threshold Signatures** with 3 of 5 signing, individual signature shares
-3. **Tor + I2P Hidden Services** for anonymity networks with .onion and .i2p addresses 
-4. **NEAR Intents** is the layer for all our cross-chain intent transactions in evidence operations via solver network
-5. **Mina zkApps** gives us credential proofs with onchain verification at `B62qjfNr4fERPmVx6RbZxdYLmELeJwoisWGqcsWyceAn17DVAMNm4zr`
-6. **IPFS Content Addressing** is the decentralized storage 
-7. **Zero-Knowledge Attestations** proves email domain ownership without revealing email
-8. **Zcash Shielded Assets** with board evidence tokens
-9. **NEAR Protocol Registry** smart contract at `reg.mrhashfox.testnet`
-10. **Hybrid Model** we have two submission modes: lightweight (hybrid) or full orchestrated flow
-12. **Evidence Marketplace** is the decentralized marketplace for evidence access requests and verification bounties
-13. **Viewing Key Encryption** ChaCha20Poly1305 encryption when we need evidence privacy selective disclosure
-
-You'll notice this architecture has no servers to seize, single admins, metadata leakage and IP address tracing.
-
----
 
 ## HYBRID MODEL: TWO SUBMISSION MODES
 
