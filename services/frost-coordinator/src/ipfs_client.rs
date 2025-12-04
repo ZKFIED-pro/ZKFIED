@@ -7,8 +7,8 @@ use crate::metadata_stripper::MetadataStripper;
 pub struct EvidenceMetadata {
     pub evidence_id: String,
     pub board_category: String,
-    pub title: String,
-    pub description: String,
+    pub encrypted_title: crate::encryption::EncryptedData,
+    pub encrypted_description: crate::encryption::EncryptedData,
     pub files: Vec<FileMetadata>,
     pub timestamp: u64,
     pub zcash_txid: Option<String>,
@@ -147,7 +147,7 @@ impl IpfsClient {
     }
 
     async fn upload_to_pinata(&self, filename: &str, data: Vec<u8>, jwt: &str) -> Result<String> {
-        tracing::info!("Uploading '{}' to Pinata", filename);
+        tracing::info!("Uploading '{}' ({} bytes) to Pinata", filename, data.len());
 
         let part = multipart::Part::bytes(data)
             .file_name(filename.to_string());
@@ -163,12 +163,22 @@ impl IpfsClient {
             .await
             .context("Failed to upload to Pinata")?;
 
-        let json: serde_json::Value = response.json().await
-            .context("Failed to parse Pinata response")?;
+        let status = response.status();
+        let response_text = response.text().await
+            .context("Failed to read Pinata response body")?;
+
+        tracing::info!("Pinata response status: {}, body: {}", status, response_text);
+
+        let json: serde_json::Value = serde_json::from_str(&response_text)
+            .context(format!("Failed to parse Pinata response as JSON: {}", response_text))?;
+
+        if !status.is_success() {
+            return Err(anyhow::anyhow!("Pinata API error ({}): {}", status, response_text));
+        }
 
         let cid = json["IpfsHash"]
             .as_str()
-            .ok_or_else(|| anyhow::anyhow!("Missing IpfsHash in Pinata response"))?
+            .ok_or_else(|| anyhow::anyhow!("Missing IpfsHash in Pinata response: {}", response_text))?
             .to_string();
 
         tracing::info!("File '{}' uploaded to Pinata: {}", filename, cid);

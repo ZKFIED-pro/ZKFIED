@@ -492,8 +492,8 @@ pub async fn check_evidence(
     };
 
     // Parse the EvidenceMetadata structure from IPFS
-    let encrypted_json: serde_json::Value = match serde_json::from_slice(&encrypted_data) {
-        Ok(json) => json,
+    let metadata: crate::ipfs_client::EvidenceMetadata = match serde_json::from_slice(&encrypted_data) {
+        Ok(meta) => meta,
         Err(e) => {
             tracing::error!("Failed to parse encrypted data: {}", e);
             return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
@@ -503,35 +503,8 @@ pub async fn check_evidence(
         }
     };
 
-    // Extract encrypted_title
-    let title_ciphertext = encrypted_json["encrypted_title"]["ciphertext"]
-        .as_array()
-        .map(|arr| arr.iter().filter_map(|v| v.as_u64().map(|n| n as u8)).collect::<Vec<u8>>())
-        .unwrap_or_default();
-
-    let title_nonce = encrypted_json["encrypted_title"]["nonce"]
-        .as_array()
-        .map(|arr| arr.iter().filter_map(|v| v.as_u64().map(|n| n as u8)).collect::<Vec<u8>>())
-        .unwrap_or_default();
-
-    // Extract encrypted_description
-    let desc_ciphertext = encrypted_json["encrypted_description"]["ciphertext"]
-        .as_array()
-        .map(|arr| arr.iter().filter_map(|v| v.as_u64().map(|n| n as u8)).collect::<Vec<u8>>())
-        .unwrap_or_default();
-
-    let desc_nonce = encrypted_json["encrypted_description"]["nonce"]
-        .as_array()
-        .map(|arr| arr.iter().filter_map(|v| v.as_u64().map(|n| n as u8)).collect::<Vec<u8>>())
-        .unwrap_or_default();
-
     // Decrypt title
-    let encrypted_title = EncryptedData {
-        ciphertext: title_ciphertext,
-        nonce: title_nonce,
-    };
-
-    let decrypted_title = match EvidenceEncryption::decrypt_string(&encrypted_title, &body.viewing_key) {
+    let decrypted_title = match EvidenceEncryption::decrypt_string(&metadata.encrypted_title, &body.viewing_key) {
         Ok(decrypted) => decrypted,
         Err(e) => {
             tracing::error!("Failed to decrypt title: {}", e);
@@ -543,12 +516,7 @@ pub async fn check_evidence(
     };
 
     // Decrypt description
-    let encrypted_desc = EncryptedData {
-        ciphertext: desc_ciphertext,
-        nonce: desc_nonce,
-    };
-
-    let decrypted_description = match EvidenceEncryption::decrypt_string(&encrypted_desc, &body.viewing_key) {
+    let decrypted_description = match EvidenceEncryption::decrypt_string(&metadata.encrypted_description, &body.viewing_key) {
         Ok(decrypted) => decrypted,
         Err(e) => {
             tracing::error!("Failed to decrypt description: {}", e);

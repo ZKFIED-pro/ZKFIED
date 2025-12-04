@@ -222,7 +222,7 @@ const CheckEvidencePage: React.FC = () => {
                     Title
                   </p>
                   <p className="text-white" style={{ fontSize: '14px', fontFamily: 'monospace' }}>
-                    {result.metadata.title}
+                    {result.title}
                   </p>
                 </div>
 
@@ -232,7 +232,7 @@ const CheckEvidencePage: React.FC = () => {
                   </p>
                   <div style={{ padding: '12px', background: 'rgb(20, 20, 20)', border: '1px solid rgb(52, 52, 52)' }}>
                     <p className="text-white" style={{ fontSize: '12px', fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
-                      {result.metadata.description}
+                      {result.description}
                     </p>
                   </div>
                 </div>

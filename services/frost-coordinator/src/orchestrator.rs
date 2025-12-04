@@ -167,11 +167,22 @@ impl EvidenceOrchestrator {
 
         let commitment_hash = self.compute_commitment_hash(&request);
 
+        // Encrypt title and description using the first viewing key
+        use crate::encryption::EvidenceEncryption;
+        let viewing_key = request.viewing_keys.get(0)
+            .ok_or_else(|| anyhow::anyhow!("No viewing keys provided"))?;
+
+        let encrypted_title = EvidenceEncryption::encrypt_string(&request.title, viewing_key)
+            .context("Failed to encrypt title")?;
+
+        let encrypted_description = EvidenceEncryption::encrypt_string(&request.description, viewing_key)
+            .context("Failed to encrypt description")?;
+
         let metadata = EvidenceMetadata {
             evidence_id: evidence_id.clone(),
             board_category: request.board_category.clone(),
-            title: request.title.clone(),
-            description: request.description.clone(),
+            encrypted_title,
+            encrypted_description,
             files: file_metadata,
             timestamp,
             zcash_txid: None,

@@ -294,8 +294,8 @@ pub async fn submit_evidence(
     let metadata = crate::ipfs_client::EvidenceMetadata {
         evidence_id: evidence_id.clone(),
         board_category: board_category.clone(),
-        title: serde_json::to_string(&encrypted_title).unwrap_or_else(|_| "encrypted".to_string()),
-        description: serde_json::to_string(&encrypted_description).unwrap_or_else(|_| "encrypted".to_string()),
+        encrypted_title,
+        encrypted_description,
         files: vec![],
         timestamp,
         zcash_txid: None,
