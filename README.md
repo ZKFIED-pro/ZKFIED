@@ -1,4 +1,4 @@
-# <ZKFIED is the safest whistleblower tool>
+# ZKFIED is the safest whistleblower tool.
 
 We have developed this for whistleblower protection and evidence cooperation for sensitive topics. 
 
