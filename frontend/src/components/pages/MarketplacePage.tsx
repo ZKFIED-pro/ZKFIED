@@ -105,7 +105,8 @@ const MarketplacePage: React.FC = () => {
 
     try {
       const nearAmount = parseFloat(formData.reward_amount)
-      const yoctoNearAmount = Math.floor(nearAmount * 1e24).toString()
+      // Convert to yoctoNEAR (1 NEAR = 10^24 yoctoNEAR) without scientific notation
+      const yoctoNearAmount = BigInt(Math.floor(nearAmount * 1e24)).toString()
 
       const requestData = {
         evidence_id: formData.evidence_id.trim(),
@@ -149,7 +150,8 @@ const MarketplacePage: React.FC = () => {
 
     try {
       const nearAmount = parseFloat(bidFormData.bid_amount)
-      const yoctoNearAmount = Math.floor(nearAmount * 1e24).toString()
+      // Convert to yoctoNEAR (1 NEAR = 10^24 yoctoNEAR) without scientific notation
+      const yoctoNearAmount = BigInt(Math.floor(nearAmount * 1e24)).toString()
 
       const completionDate = new Date()
       completionDate.setHours(completionDate.getHours() + parseInt(bidFormData.estimated_completion))

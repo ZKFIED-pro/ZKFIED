@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://zkfied-frost-testnet.fly.dev'
 
 export interface AccessRequest {
   request_id: string
@@ -110,9 +110,12 @@ export const marketplaceApi = {
   },
 
   async getVerificationRequests(): Promise<VerificationRequest[]> {
-    const response = await fetch(`${API_BASE_URL}/api/marketplace/verification-requests`)
+    const response = await fetch(`${API_BASE_URL}/api/marketplace/verification-requests`, {
+      headers: { 'Content-Type': 'application/json' }
+    })
     if (!response.ok) throw new Error('Failed to fetch verification requests')
-    return response.json()
+    const data = await response.json()
+    return data.requests || data
   },
 
   async getBids(requestId: string): Promise<SolverBid[]> {
