@@ -2,7 +2,7 @@
 
 We have developed this for whistleblower protection and evidence cooperation for sensitive topics. 
 
-**Production stack: Zcash Shielded Transactions, FROST Threshold Signatures (3-of-5), ZK Attestations, IPFS, Tor/I2P Hidden Services, NEAR Protocol Registry, NEAR Intents, Mina zkApps, OTP Authentication, Evidence Marketplace**
+Production stack: Zcash Shielded Transactions, FROST Threshold Signatures (3-of-5), ZK Attestations, IPFS, Tor/I2P Hidden Services, NEAR Protocol Registry, NEAR Intents, Mina zkApps, OTP Authentication, Evidence Marketplace
 
 ## Production Deployments
 
@@ -48,8 +48,6 @@ We have developed this for whistleblower protection and evidence cooperation for
 - Main: https://github.com/ZKFIED-pro/ZKFIED
 
 ---
-
-## WE HAD TO BUILD THIS. WHISTLEBLOWER PLATFORMS HAVE NOT DONE THEIR JOB AT PROTECTING
 
 ### a bit of history
 
