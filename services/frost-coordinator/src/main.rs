@@ -311,10 +311,17 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/marketplace/near/bids/:request_id", get(zkfied_frost_coordinator::marketplace_routes::get_near_bids))
         .with_state(marketplace_state);
 
+    // Configure CORS to allow localhost and all origins
+    let cors = tower_http::cors::CorsLayer::new()
+        .allow_origin(tower_http::cors::Any)
+        .allow_methods(tower_http::cors::Any)
+        .allow_headers(tower_http::cors::Any)
+        .expose_headers(tower_http::cors::Any);
+
     let app = frost_router
         .merge(hybrid_router)
         .merge(marketplace_router)
-        .layer(tower_http::cors::CorsLayer::permissive())
+        .layer(cors)
         .layer(tower_http::trace::TraceLayer::new_for_http());
 
     let port = std::env::var("PORT")
