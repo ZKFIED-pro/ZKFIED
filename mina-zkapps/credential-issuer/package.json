@@ -4,7 +4,11 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "deploy": "node build/src/deploy.js"
+    "deploy": "node build/src/deploy.js",
+    "test": "tsc && node build/src/test_deploy.js",
+    "issue": "tsc && node build/src/issue_credential.js",
+    "proof": "tsc && node build/src/generate_proof.js",
+    "testproof": "tsc && node build/src/create_test_proof.js"
   },
   "dependencies": {
     "dotenv": "^17.2.3",

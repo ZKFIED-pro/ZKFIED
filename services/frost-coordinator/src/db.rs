@@ -825,6 +825,8 @@ impl Database {
             INSERT INTO mina_credential_proofs
             (credential_hash, holder_public_key, credential_type, timestamp, proof_data, board_type, verified_at, created_at)
             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            ON CONFLICT(credential_hash) DO UPDATE SET
+                verified_at = ?7
             "#
         )
         .bind(credential_hash)

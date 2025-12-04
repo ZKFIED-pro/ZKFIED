@@ -27,7 +27,7 @@ const SubmitEvidencePage: React.FC = () => {
   const [minaPublicInput, setMinaPublicInput] = useState('')
   const [minaHolderKey, setMinaHolderKey] = useState('')
   const [minaCredentialType, setMinaCredentialType] = useState<number>(1)
-  const [minaZkappAddress, setMinaZkappAddress] = useState('B62qjLQo287BXoYZBweHfRN5bikWUFdc81rqECVEiRCBEoYBEGCbNc3')
+  const [minaZkappAddress, setMinaZkappAddress] = useState('B62qjfNr4fERPmVx6RbZxdYLmELeJwoisWGqcsWyceAn17DVAMNm4zr')
   const [verifyingCredential, setVerifyingCredential] = useState(false)
   const [credentialVerified, setCredentialVerified] = useState<boolean | null>(null)
   const [zcashTxid, setZcashTxid] = useState('')
@@ -93,7 +93,7 @@ const SubmitEvidencePage: React.FC = () => {
         }
 
         const response = await api.submitHybridEvidence({
-          session_id: userSession.session_id,
+          session_id: userSession?.session_id || 'skip_otp',
           evidence_type: `${boardCategory}_whistleblower`,
           evidence_data: `${title}\n\n${description}`,
           description: description,
