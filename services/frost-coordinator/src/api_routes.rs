@@ -294,16 +294,16 @@ pub async fn submit_evidence(
     let metadata = crate::ipfs_client::EvidenceMetadata {
         evidence_id: evidence_id.clone(),
         board_category: board_category.clone(),
-        encrypted_title,
-        encrypted_description,
+        title: serde_json::to_string(&encrypted_title).unwrap_or_else(|_| "encrypted".to_string()),
+        description: serde_json::to_string(&encrypted_description).unwrap_or_else(|_| "encrypted".to_string()),
         files: vec![],
         timestamp,
         zcash_txid: None,
         commitment_hash: commitment_hash.clone(),
-        viewing_keys_hash,
+        viewing_keys: vec![viewing_key.clone()],
     };
 
-    let ipfs_cid = match state.ipfs.upload_evidence(&metadata, vec![], &viewing_key).await {
+    let ipfs_cid = match state.ipfs.upload_evidence(&metadata, vec![]).await {
         Ok(cid) => cid,
         Err(e) => {
             tracing::warn!("IPFS upload failed ({}), generating fallback CID", e);

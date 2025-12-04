@@ -4,11 +4,29 @@ use std::sync::Arc;
 use crate::db::Database;
 use crate::encryption::EvidenceEncryption;
 
+// Helper functions for serializing u128 as strings (JSON can't handle u128)
+fn serialize_u128_as_string<S>(value: &u128, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str(&value.to_string())
+}
+
+fn deserialize_u128_from_string<'de, D>(deserializer: D) -> Result<u128, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    s.parse().map_err(serde::de::Error::custom)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AccessRequest {
     pub request_id: String,
     pub evidence_id: String,
     pub requester_id: String,
+    #[serde(serialize_with = "serialize_u128_as_string")]
+    #[serde(deserialize_with = "deserialize_u128_from_string")]
     pub bid_amount: u128,
     pub purpose: AccessPurpose,
     pub zk_credentials: Option<Vec<u8>>,
@@ -41,6 +59,8 @@ pub struct VerificationRequest {
     pub request_id: String,
     pub evidence_id: String,
     pub verification_type: VerificationType,
+    #[serde(serialize_with = "serialize_u128_as_string")]
+    #[serde(deserialize_with = "deserialize_u128_from_string")]
     pub reward_amount: u128,
     pub deadline: i64,
     pub requirements: Vec<String>,
@@ -62,6 +82,8 @@ pub struct SolverBid {
     pub bid_id: String,
     pub request_id: String,
     pub solver_id: String,
+    #[serde(serialize_with = "serialize_u128_as_string")]
+    #[serde(deserialize_with = "deserialize_u128_from_string")]
     pub bid_amount: u128,
     pub estimated_completion: i64,
     pub credentials: Vec<u8>,

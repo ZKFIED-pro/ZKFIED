@@ -14,6 +14,11 @@ const MarketplacePage: React.FC = () => {
   const [myEvidence, setMyEvidence] = useState<string[]>([])
   const [showBidForm, setShowBidForm] = useState(false)
 
+  // Success states
+  const [requestCreated, setRequestCreated] = useState<{ request_id: string; reward_amount: string } | null>(null)
+  const [bidSubmitted, setBidSubmitted] = useState<{ bid_id: string; amount: string } | null>(null)
+  const [bidAccepted, setBidAccepted] = useState<{ bid_id: string; request_id: string } | null>(null)
+
   const [formData, setFormData] = useState({
     evidence_id: '',
     verification_type: '',
@@ -104,9 +109,11 @@ const MarketplacePage: React.FC = () => {
     }
 
     try {
-      const nearAmount = parseFloat(formData.reward_amount)
-      // Convert to yoctoNEAR (1 NEAR = 10^24 yoctoNEAR) without scientific notation
-      const yoctoNearAmount = BigInt(Math.floor(nearAmount * 1e24)).toString()
+      // Convert to yoctoNEAR properly without precision loss
+      const nearAmountStr = formData.reward_amount.trim()
+      const [whole = '0', decimal = '0'] = nearAmountStr.split('.')
+      const paddedDecimal = (decimal + '0'.repeat(24)).slice(0, 24)
+      const yoctoNearAmount = (whole + paddedDecimal).replace(/^0+/, '') || '0'
 
       const requestData = {
         evidence_id: formData.evidence_id.trim(),
@@ -116,10 +123,15 @@ const MarketplacePage: React.FC = () => {
         deadline: formData.deadline
       }
       console.log('Sending request:', requestData)
-      await marketplaceApi.createVerificationRequest(requestData)
-      alert('Verification request created successfully')
+      const response = await marketplaceApi.createVerificationRequest(requestData)
+
+      // Show success panel
+      setRequestCreated({
+        request_id: response.request_id || 'Created',
+        reward_amount: formData.reward_amount
+      })
+
       loadVerificationRequests()
-      setActiveTab('requests')
       setFormData({
         evidence_id: '',
         verification_type: '',
@@ -149,15 +161,17 @@ const MarketplacePage: React.FC = () => {
     if (!selectedRequest) return
 
     try {
-      const nearAmount = parseFloat(bidFormData.bid_amount)
-      // Convert to yoctoNEAR (1 NEAR = 10^24 yoctoNEAR) without scientific notation
-      const yoctoNearAmount = BigInt(Math.floor(nearAmount * 1e24)).toString()
+      // Convert to yoctoNEAR properly without precision loss
+      const nearAmountStr = bidFormData.bid_amount.trim()
+      const [whole = '0', decimal = '0'] = nearAmountStr.split('.')
+      const paddedDecimal = (decimal + '0'.repeat(24)).slice(0, 24)
+      const yoctoNearAmount = (whole + paddedDecimal).replace(/^0+/, '') || '0'
 
       const completionDate = new Date()
       completionDate.setHours(completionDate.getHours() + parseInt(bidFormData.estimated_completion))
       const isoCompletionDate = completionDate.toISOString()
 
-      await marketplaceApi.submitBid({
+      const response = await marketplaceApi.submitBid({
         request_id: selectedRequest.request_id,
         solver_id: bidFormData.solver_id,
         bid_amount: yoctoNearAmount,
@@ -165,7 +179,13 @@ const MarketplacePage: React.FC = () => {
         credentials: bidFormData.credentials || '00',
         proof_of_capability: bidFormData.proof_of_capability || '00'
       })
-      alert('Bid submitted successfully')
+
+      // Show success panel
+      setBidSubmitted({
+        bid_id: response.bid_id || 'Submitted',
+        amount: bidFormData.bid_amount
+      })
+
       loadBids(selectedRequest.request_id)
       setShowBidForm(false)
       setBidFormData({
@@ -190,11 +210,17 @@ const MarketplacePage: React.FC = () => {
     if (!confirm('Accept this bid? This will lock the escrow.')) return
 
     try {
-      await marketplaceApi.acceptBid({
+      const response = await marketplaceApi.acceptBid({
         request_id: selectedRequest.request_id,
         bid_id: bidId
       })
-      alert('Bid accepted successfully')
+
+      // Show success panel
+      setBidAccepted({
+        bid_id: bidId,
+        request_id: selectedRequest.request_id
+      })
+
       loadBids(selectedRequest.request_id)
       loadNearData(selectedRequest.request_id)
     } catch (error: any) {
@@ -279,6 +305,92 @@ const MarketplacePage: React.FC = () => {
 
       <section className="section bg-void">
         <div className="container">
+          {/* Success Panels */}
+          {requestCreated && (
+            <div style={{ marginBottom: '24px', padding: '24px', background: 'rgba(0, 255, 0, 0.05)', border: '2px solid #00ff00' }}>
+              <h3 style={{ color: '#00ff00', fontFamily: 'monospace', fontSize: '16px', marginBottom: '16px' }}>
+                ✓ Verification Request Created Successfully
+              </h3>
+              <div style={{ color: '#fff', fontFamily: 'monospace', fontSize: '12px', marginBottom: '12px' }}>
+                <div style={{ marginBottom: '8px' }}>Request ID: <span style={{ color: '#00ff00' }}>{requestCreated.request_id}</span></div>
+                <div>Reward: <span style={{ color: '#00ff00' }}>{requestCreated.reward_amount} NEAR</span></div>
+              </div>
+              <button
+                onClick={() => {
+                  setRequestCreated(null)
+                  setActiveTab('requests')
+                }}
+                style={{
+                  padding: '8px 16px',
+                  background: '#00ff00',
+                  color: '#000',
+                  border: 'none',
+                  fontFamily: 'monospace',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold'
+                }}
+              >
+                View Requests
+              </button>
+            </div>
+          )}
+
+          {bidSubmitted && (
+            <div style={{ marginBottom: '24px', padding: '24px', background: 'rgba(0, 255, 0, 0.05)', border: '2px solid #00ff00' }}>
+              <h3 style={{ color: '#00ff00', fontFamily: 'monospace', fontSize: '16px', marginBottom: '16px' }}>
+                ✓ Bid Submitted Successfully
+              </h3>
+              <div style={{ color: '#fff', fontFamily: 'monospace', fontSize: '12px', marginBottom: '12px' }}>
+                <div style={{ marginBottom: '8px' }}>Bid ID: <span style={{ color: '#00ff00' }}>{bidSubmitted.bid_id}</span></div>
+                <div>Amount: <span style={{ color: '#00ff00' }}>{bidSubmitted.amount} NEAR</span></div>
+              </div>
+              <button
+                onClick={() => setBidSubmitted(null)}
+                style={{
+                  padding: '8px 16px',
+                  background: '#00ff00',
+                  color: '#000',
+                  border: 'none',
+                  fontFamily: 'monospace',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold'
+                }}
+              >
+                Close
+              </button>
+            </div>
+          )}
+
+          {bidAccepted && (
+            <div style={{ marginBottom: '24px', padding: '24px', background: 'rgba(0, 255, 0, 0.05)', border: '2px solid #00ff00' }}>
+              <h3 style={{ color: '#00ff00', fontFamily: 'monospace', fontSize: '16px', marginBottom: '16px' }}>
+                ✓ Bid Accepted Successfully
+              </h3>
+              <div style={{ color: '#fff', fontFamily: 'monospace', fontSize: '12px', marginBottom: '12px' }}>
+                <div style={{ marginBottom: '8px' }}>Bid ID: <span style={{ color: '#00ff00' }}>{bidAccepted.bid_id}</span></div>
+                <div>Request: <span style={{ color: '#00ff00' }}>{bidAccepted.request_id}</span></div>
+                <div style={{ marginTop: '8px', color: '#888' }}>Escrow has been locked for this bid</div>
+              </div>
+              <button
+                onClick={() => setBidAccepted(null)}
+                style={{
+                  padding: '8px 16px',
+                  background: '#00ff00',
+                  color: '#000',
+                  border: 'none',
+                  fontFamily: 'monospace',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold'
+                }}
+              >
+                Close
+              </button>
+            </div>
+          )}
+
           <div style={{ marginBottom: '48px' }}>
             <div style={{ display: 'flex', gap: '16px', borderBottom: '1px solid #333' }}>
               <button
@@ -382,7 +494,7 @@ const MarketplacePage: React.FC = () => {
                         borderTop: '1px solid #222'
                       }}>
                         <div style={{ color: '#00ff00', fontFamily: 'monospace', fontSize: '14px', fontWeight: 'bold' }}>
-                          {(Number(request.reward_amount) / 1e24).toFixed(2)} NEAR
+                          {(Number(request.reward_amount) / 1e18).toFixed(2)} NEAR
                         </div>
                         <div style={{ color: '#888', fontFamily: 'monospace', fontSize: '11px' }}>
                           Deadline: {new Date(request.deadline * 1000).toLocaleDateString()}
@@ -492,7 +604,7 @@ const MarketplacePage: React.FC = () => {
                       Reward
                     </div>
                     <div style={{ color: '#00ff00', fontFamily: 'monospace', fontSize: '14px', fontWeight: 'bold' }}>
-                      {(Number(selectedRequest.reward_amount) / 1e24).toFixed(2)} NEAR
+                      {(Number(selectedRequest.reward_amount) / 1e18).toFixed(2)} NEAR
                     </div>
                   </div>
                   <div>
@@ -687,7 +799,7 @@ const MarketplacePage: React.FC = () => {
                             Solver: {bid.solver_id.substring(0, 20)}...
                           </div>
                           <div style={{ color: '#00ff00', fontFamily: 'monospace', fontSize: '12px', fontWeight: 'bold' }}>
-                            {bid.bid_amount} NEAR
+                            {(Number(bid.bid_amount) / 1e18).toFixed(2)} NEAR
                           </div>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
