@@ -330,15 +330,21 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or(3000);
 
     tracing::info!("Connecting to NEAR Solver Bus...");
-    match SolverEventHandler::new().await {
-        Ok(handler) => {
+    match tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        SolverEventHandler::new()
+    ).await {
+        Ok(Ok(handler)) => {
             tracing::info!("Solver Bus WebSocket connected");
             tokio::spawn(async move {
                 handler.handle_events().await;
             });
         }
-        Err(e) => {
+        Ok(Err(e)) => {
             tracing::warn!("Failed to connect to Solver Bus: {} (continuing anyway)", e);
+        }
+        Err(_) => {
+            tracing::warn!("Timeout connecting to Solver Bus (continuing anyway)");
         }
     }
 

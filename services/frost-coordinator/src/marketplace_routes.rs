@@ -491,6 +491,7 @@ pub async fn check_evidence(
         }
     };
 
+    // Parse the EvidenceMetadata structure from IPFS
     let encrypted_json: serde_json::Value = match serde_json::from_slice(&encrypted_data) {
         Ok(json) => json,
         Err(e) => {
@@ -502,60 +503,73 @@ pub async fn check_evidence(
         }
     };
 
-    let encrypted = EncryptedData {
-        ciphertext: match hex::decode(encrypted_json["ciphertext"].as_str().unwrap_or("")) {
-            Ok(data) => data,
-            Err(_) => {
-                return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
-                    "success": false,
-                    "message": "Invalid ciphertext format"
-                })));
-            }
-        },
-        nonce: match hex::decode(encrypted_json["nonce"].as_str().unwrap_or("")) {
-            Ok(data) => data,
-            Err(_) => {
-                return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
-                    "success": false,
-                    "message": "Invalid nonce format"
-                })));
-            }
-        },
+    // Extract encrypted_title
+    let title_ciphertext = encrypted_json["encrypted_title"]["ciphertext"]
+        .as_array()
+        .map(|arr| arr.iter().filter_map(|v| v.as_u64().map(|n| n as u8)).collect::<Vec<u8>>())
+        .unwrap_or_default();
+
+    let title_nonce = encrypted_json["encrypted_title"]["nonce"]
+        .as_array()
+        .map(|arr| arr.iter().filter_map(|v| v.as_u64().map(|n| n as u8)).collect::<Vec<u8>>())
+        .unwrap_or_default();
+
+    // Extract encrypted_description
+    let desc_ciphertext = encrypted_json["encrypted_description"]["ciphertext"]
+        .as_array()
+        .map(|arr| arr.iter().filter_map(|v| v.as_u64().map(|n| n as u8)).collect::<Vec<u8>>())
+        .unwrap_or_default();
+
+    let desc_nonce = encrypted_json["encrypted_description"]["nonce"]
+        .as_array()
+        .map(|arr| arr.iter().filter_map(|v| v.as_u64().map(|n| n as u8)).collect::<Vec<u8>>())
+        .unwrap_or_default();
+
+    // Decrypt title
+    let encrypted_title = EncryptedData {
+        ciphertext: title_ciphertext,
+        nonce: title_nonce,
     };
 
-    match EvidenceEncryption::decrypt_string(&encrypted, &body.viewing_key) {
-        Ok(decrypted) => {
-            let evidence_data: serde_json::Value = match serde_json::from_str(&decrypted) {
-                Ok(data) => data,
-                Err(e) => {
-                    tracing::error!("Failed to parse decrypted evidence: {}", e);
-                    return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({
-                        "success": false,
-                        "message": "Failed to parse decrypted evidence"
-                    })));
-                }
-            };
-
-            (StatusCode::OK, Json(serde_json::json!({
-                "success": true,
-                "evidence_id": body.evidence_id,
-                "evidence_data": evidence_data,
-                "metadata": {
-                    "ipfs_cid": evidence.ipfs_cid,
-                    "board_category": evidence.board_category,
-                    "title": evidence.title,
-                    "description": evidence.description,
-                    "status": evidence.status,
-                    "submission_timestamp": evidence.submission_timestamp,
-                }
-            })))
-        }
+    let decrypted_title = match EvidenceEncryption::decrypt_string(&encrypted_title, &body.viewing_key) {
+        Ok(decrypted) => decrypted,
         Err(e) => {
-            tracing::error!("Failed to decrypt evidence: {}", e);
-            (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            tracing::error!("Failed to decrypt title: {}", e);
+            return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({
                 "success": false,
                 "message": "Invalid viewing key or decryption failed"
-            })))
+            })));
         }
-    }
+    };
+
+    // Decrypt description
+    let encrypted_desc = EncryptedData {
+        ciphertext: desc_ciphertext,
+        nonce: desc_nonce,
+    };
+
+    let decrypted_description = match EvidenceEncryption::decrypt_string(&encrypted_desc, &body.viewing_key) {
+        Ok(decrypted) => decrypted,
+        Err(e) => {
+            tracing::error!("Failed to decrypt description: {}", e);
+            return (StatusCode::UNAUTHORIZED, Json(serde_json::json!({
+                "success": false,
+                "message": "Invalid viewing key or decryption failed"
+            })));
+        }
+    };
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "success": true,
+        "evidence_id": body.evidence_id,
+        "title": decrypted_title,
+        "description": decrypted_description,
+        "metadata": {
+            "ipfs_cid": evidence.ipfs_cid,
+            "board_category": evidence.board_category,
+            "status": evidence.status,
+            "submission_timestamp": evidence.submission_timestamp,
+            "zcash_txid": evidence.zcash_txid,
+        }
+    })))
 }

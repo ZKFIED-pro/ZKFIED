@@ -179,9 +179,22 @@ impl IpfsClient {
     pub async fn download_file(&self, cid: &str) -> Result<Vec<u8>> {
         tracing::debug!("Downloading file from IPFS: {}", cid);
 
+        // Try Pinata gateway first (faster and more reliable)
+        match self.download_from_pinata(cid).await {
+            Ok(bytes) => {
+                tracing::info!("Downloaded {} bytes from Pinata gateway CID: {}", bytes.len(), cid);
+                return Ok(bytes);
+            }
+            Err(e) => {
+                tracing::warn!("Failed to download from Pinata gateway: {}, trying local IPFS node", e);
+            }
+        }
+
+        // Fallback to local IPFS node
         let bytes = self.client
             .post(format!("{}/api/v0/cat", self.base_url))
             .query(&[("arg", cid)])
+            .timeout(std::time::Duration::from_secs(10))
             .send()
             .await
             .context(format!("Failed to download file CID: {}", cid))?
@@ -190,7 +203,29 @@ impl IpfsClient {
             .context("Failed to read response bytes")?
             .to_vec();
 
-        tracing::info!("Downloaded {} bytes from IPFS CID: {}", bytes.len(), cid);
+        tracing::info!("Downloaded {} bytes from local IPFS CID: {}", bytes.len(), cid);
+
+        Ok(bytes)
+    }
+
+    async fn download_from_pinata(&self, cid: &str) -> Result<Vec<u8>> {
+        let mut request = self.client
+            .get(format!("https://gateway.pinata.cloud/ipfs/{}", cid))
+            .timeout(std::time::Duration::from_secs(10));
+
+        // Add authentication if JWT is available
+        if let Some(jwt) = &self.pinata_jwt {
+            request = request.header("Authorization", format!("Bearer {}", jwt));
+        }
+
+        let bytes = request
+            .send()
+            .await
+            .context("Failed to download from Pinata gateway")?
+            .bytes()
+            .await
+            .context("Failed to read Pinata response")?
+            .to_vec();
 
         Ok(bytes)
     }
