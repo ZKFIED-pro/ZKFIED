@@ -101,7 +101,8 @@ const CheckEvidencePage: React.FC = () => {
 
       <div className="container" style={{ paddingTop: '40px', paddingBottom: '80px' }}>
         <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-          <form onSubmit={handleSubmit}>
+          {!result && (
+            <form onSubmit={handleSubmit}>
             <div className="st-card" style={{ marginBottom: '24px' }}>
               <div className="st-card-inner">
                 <h3 className="mb-md" style={{ fontSize: '14px' }}>Evidence ID</h3>
@@ -171,6 +172,7 @@ const CheckEvidencePage: React.FC = () => {
               {loading ? 'Decrypting...' : 'Decrypt Evidence'}
             </button>
           </form>
+          )}
 
           {result && result.success && (
             <div className="st-card" style={{ marginTop: '24px', borderColor: 'rgb(0, 255, 136)' }}>
@@ -269,9 +271,27 @@ const CheckEvidencePage: React.FC = () => {
                 </div>
 
                 <div style={{ paddingTop: '16px', borderTop: '1px solid rgb(52, 52, 52)' }}>
-                  <p className="text-gray" style={{ fontSize: '10px' }}>
+                  <p className="text-gray" style={{ fontSize: '10px', marginBottom: '16px' }}>
                     Evidence verified and decrypted successfully
                   </p>
+                  <button
+                    onClick={() => {
+                      setResult(undefined)
+                      setEvidenceId('')
+                      setViewingKey('')
+                      setError(undefined)
+                    }}
+                    className="st-btn"
+                    style={{
+                      width: '100%',
+                      fontSize: '12px',
+                      padding: '12px',
+                      borderColor: 'rgb(0, 255, 136)',
+                      color: 'rgb(0, 255, 136)'
+                    }}
+                  >
+                    Back to Decrypt
+                  </button>
                 </div>
               </div>
             </div>

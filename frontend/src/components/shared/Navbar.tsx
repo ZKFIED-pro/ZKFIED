@@ -125,7 +125,7 @@ const Navbar: React.FC = () => {
   }
   
   return (
-    <nav className="terminal-nav sticky top-0 z-fixed">
+    <nav className="terminal-nav sticky top-0 z-50 bg-void border-b border-gray-800" style={{ backdropFilter: 'blur(10px)', backgroundColor: 'rgba(0, 0, 0, 0.95)' }}>
       <div className="container max-w-full px-10">
         <div className="flex items-center justify-between py-4">
           {/* Logo */}

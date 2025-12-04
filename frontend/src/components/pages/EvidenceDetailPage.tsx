@@ -312,8 +312,8 @@ const EvidenceDetailPage: React.FC = () => {
           </div>
 
           <div style={{ marginTop: '24px', textAlign: 'center' }}>
-            <Link to="/" className="st-btn" style={{ padding: '12px 32px', fontSize: '12px' }}>
-              Back to Dashboard
+            <Link to="/browse" className="st-btn" style={{ padding: '12px 32px', fontSize: '12px' }}>
+              Back to Browse Evidence
             </Link>
           </div>
         </div>
